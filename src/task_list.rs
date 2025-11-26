@@ -5,8 +5,6 @@ use gpui::{
     Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton, ParentElement,
     Render, RenderOnce, SharedString, Styled, Subscription, Task, Timer, Window,
 };
-use serde::Deserialize;
-
 use gpui_component::{
     button::{Button, ButtonVariants},
     h_flex,
@@ -15,49 +13,10 @@ use gpui_component::{
     v_flex, ActiveTheme, Icon, IconName, IndexPath, Selectable, Sizable,
 };
 
+use crate::task_schema::{AgentTask, TaskStatus};
 use crate::{CreateTaskFromWelcome, ShowConversationPanel, ShowWelcomePanel};
 
 actions!(list_task, [SelectedAgentTask]);
-
-/// Task status enumeration
-#[derive(Clone, Default, Debug, Deserialize)]
-enum TaskStatus {
-    /// Task is pending
-    #[default]
-    Pending,
-    /// Task is currently running
-    InProgress,
-    /// Task completed successfully
-    Completed,
-    /// Task failed to complete
-    Failed,
-}
-
-#[derive(Clone, Default, Deserialize)]
-struct AgentTask {
-    name: String,
-    task_type: String,
-    add_new_code_lines: i16,
-    delete_code_lines: i16,
-    status: TaskStatus,
-
-    #[serde(skip)]
-    change_timestamp: i16,
-    #[serde(skip)]
-    change_timestamp_str: SharedString,
-    #[serde(skip)]
-    add_new_code_lines_str: SharedString,
-    #[serde(skip)]
-    delete_code_lines_str: SharedString,
-}
-
-impl AgentTask {
-    fn prepare(mut self) -> Self {
-        self.add_new_code_lines_str = format!("+{}", self.add_new_code_lines).into();
-        self.delete_code_lines_str = format!("-{}", self.delete_code_lines).into();
-        self
-    }
-}
 
 #[derive(IntoElement)]
 struct TaskListItem {

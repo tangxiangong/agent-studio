@@ -7,6 +7,7 @@ mod editor;
 mod menu;
 mod task_list;
 mod task_turn_view;
+mod task_schema;
 mod welcome_panel;
 mod settings_window;
 

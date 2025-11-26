@@ -1,3 +1,4 @@
+pub mod acp_client;
 mod app;
 mod chat_input;
 mod code_editor;
@@ -11,6 +12,7 @@ mod task_list;
 mod task_turn_view;
 mod welcome_panel;
 pub mod workspace;
+
 
 use crate::dock_panel::{DockPanel, DockPanelContainer, DockPanelState};
 pub use app::{app_menus, menu, themes, title_bar};

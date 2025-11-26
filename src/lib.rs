@@ -7,6 +7,7 @@ mod menu;
 mod task_list;
 mod task_turn_view;
 mod welcome_panel;
+mod settings_window;
 
 mod themes;
 mod title_bar;
@@ -24,6 +25,7 @@ pub use conversation::ConversationPanel;
 pub use editor::CodeEditorPanel;
 pub use menu::UIMenu;
 use serde::{Deserialize, Serialize};
+pub use settings_window::SettingsWindow;
 pub use task_list::ListTaskPanel;
 pub use task_turn_view::CollapsibleEventTurn;
 pub use title_bar::AppTitleBar;

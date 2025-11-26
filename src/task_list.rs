@@ -385,6 +385,72 @@ impl ListDelegate for TaskListDelegate {
         None
     }
 
+    fn render_empty(&self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        // Check if we have sections but all are collapsed
+        let has_collapsed_sections = !self.industries.is_empty()
+            && self.industries.len() == self.collapsed_sections.borrow().len();
+
+        if has_collapsed_sections {
+            // Render section headers so user can expand them
+            let collapsed_sections = self.collapsed_sections.clone();
+            let list_state = self.list_state.clone();
+
+            v_flex()
+                .w_full()
+                .gap_1()
+                .children(self.industries.iter().enumerate().map(|(section, task_type)| {
+                    let collapsed_sections = collapsed_sections.clone();
+                    let list_state = list_state.clone();
+                    let task_type = task_type.clone();
+
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .justify_between()
+                        .pb_1()
+                        .px_2()
+                        .gap_2()
+                        .text_sm()
+                        .rounded(cx.theme().radius)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .gap_2()
+                                .flex_1()
+                                .text_color(cx.theme().muted_foreground)
+                                .cursor_default()
+                                .hover(|style| style.bg(cx.theme().secondary))
+                                .rounded(cx.theme().radius)
+                                .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
+                                    // Expand the section
+                                    collapsed_sections.borrow_mut().remove(&section);
+
+                                    if let Some(list_state) = list_state.as_ref() {
+                                        _ = list_state.update(cx, |_, cx| {
+                                            cx.notify();
+                                        });
+                                    }
+                                })
+                                .child(Icon::new(IconName::ChevronRight).size(px(14.)))
+                                .child(Icon::new(IconName::Folder))
+                                .child(task_type),
+                        )
+                }))
+                .into_any_element()
+        } else {
+            // Default empty state
+            h_flex()
+                .size_full()
+                .justify_center()
+                .text_color(cx.theme().muted_foreground.opacity(0.6))
+                .child(Icon::new(IconName::Inbox).size_12())
+                .into_any_element()
+        }
+    }
+
     fn loading(&self, _: &App) -> bool {
         self.loading
     }

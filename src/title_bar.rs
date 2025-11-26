@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    div, px, AnyElement, App, AppContext, Context, Corner, Entity, FocusHandle,
+    actions, div, px, AnyElement, App, AppContext, Context, Corner, Entity, FocusHandle,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Render, SharedString,
     Styled as _, Subscription, Window,
 };
@@ -14,7 +14,9 @@ use gpui_component::{
     ActiveTheme as _, IconName, PixelsExt, Sizable as _, Theme, TitleBar, WindowExt as _,
 };
 
-use crate::{app_menus, SelectFont, SelectRadius, SelectScrollbarShow};
+use crate::{app_menus, SettingsWindow, SelectFont, SelectRadius, SelectScrollbarShow};
+
+actions!(title_bar, [OpenSettings]);
 
 pub struct AppTitleBar {
     app_menu_bar: Entity<AppMenuBar>,
@@ -50,44 +52,61 @@ impl AppTitleBar {
         self.child = Rc::new(move |window, cx| f(window, cx).into_any_element());
         self
     }
+
+    fn on_action_open_settings(&mut self, _: &OpenSettings, _: &mut Window, cx: &mut Context<Self>) {
+        SettingsWindow::open(cx).detach();
+    }
 }
 
 impl Render for AppTitleBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let notifications_count = window.notifications(cx).len();
 
-        TitleBar::new()
-            // left side
-            .child(div().flex().items_center().child(self.app_menu_bar.clone()))
+        div()
+            .on_action(cx.listener(Self::on_action_open_settings))
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_end()
-                    .px_2()
-                    .gap_2()
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child((self.child.clone())(window, cx))
-                    .child(self.font_size_selector.clone())
-                    // .child(
-                    //     Button::new("github")
-                    //         .icon(IconName::GitHub)
-                    //         .small()
-                    //         .ghost()
-                    //         .on_click(|_, _, cx| {
-                    //             cx.open_url("https://github.com/longbridge/gpui-component")
-                    //         }),
-                    // )
+                TitleBar::new()
+                    // left side
+                    .child(div().flex().items_center().child(self.app_menu_bar.clone()))
                     .child(
-                        div().relative().child(
-                            Badge::new().count(notifications_count).max(99).child(
-                                Button::new("bell")
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_end()
+                            .px_2()
+                            .gap_2()
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .child((self.child.clone())(window, cx))
+                            .child(self.font_size_selector.clone())
+                            .child(
+                                Button::new("settings-btn")
+                                    .icon(IconName::Settings)
                                     .small()
                                     .ghost()
-                                    .compact()
-                                    .icon(IconName::Bell),
+                                    .on_click(|_, _, cx| {
+                                        cx.dispatch_action(&OpenSettings);
+                                    }),
+                            )
+                            // .child(
+                            //     Button::new("github")
+                            //         .icon(IconName::GitHub)
+                            //         .small()
+                            //         .ghost()
+                            //         .on_click(|_, _, cx| {
+                            //             cx.open_url("https://github.com/longbridge/gpui-component")
+                            //         }),
+                            // )
+                            .child(
+                                div().relative().child(
+                                    Badge::new().count(notifications_count).max(99).child(
+                                        Button::new("bell")
+                                            .small()
+                                            .ghost()
+                                            .compact()
+                                            .icon(IconName::Bell),
+                                    ),
+                                ),
                             ),
-                        ),
                     ),
             )
     }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use gpui::{
     px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
     Pixels, Render, Styled, Subscription, Window,
@@ -98,6 +100,8 @@ pub struct ChatInputPanel {
     mode_select: Entity<SelectState<Vec<&'static str>>>,
     agent_select: Entity<SelectState<Vec<String>>>,
     has_agents: bool,
+    /// Map of agent name -> session ID
+    sessions: HashMap<String, String>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -188,6 +192,7 @@ impl ChatInputPanel {
             mode_select,
             agent_select,
             has_agents,
+            sessions: HashMap::new(),
             _subscriptions: Vec::new(),
         }
     }
@@ -215,6 +220,110 @@ impl ChatInputPanel {
         });
         cx.notify();
     }
+
+    /// Send message to the selected agent
+    fn send_message(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Get the selected agent name
+        let agent_name = self
+            .agent_select
+            .read(cx)
+            .selected_value()
+            .cloned();
+
+        let agent_name = match agent_name {
+            Some(name) if name != "No agents" => name,
+            _ => {
+                eprintln!("No agent selected");
+                return;
+            }
+        };
+
+        // Get the input text
+        let input_text = self.input_state.read(cx).value().to_string();
+        if input_text.trim().is_empty() {
+            return;
+        }
+
+        // Get the agent handle
+        let agent_handle = AppState::global(cx)
+            .agent_manager()
+            .and_then(|m| m.get(&agent_name));
+
+        let agent_handle = match agent_handle {
+            Some(handle) => handle,
+            None => {
+                eprintln!("Agent not found: {}", agent_name);
+                return;
+            }
+        };
+
+        // Check if we have an existing session for this agent
+        let existing_session = self.sessions.get(&agent_name).cloned();
+
+        // Clear the input immediately
+        self.input_state.update(cx, |state, cx| {
+            state.set_value("", window, cx);
+        });
+
+        // Spawn async task to send the message
+        let sessions_update = cx.entity().downgrade();
+        cx.spawn(async move |_this, cx| {
+            use agent_client_protocol as acp;
+
+            // Create a new session if needed
+            let session_id = if let Some(sid) = existing_session {
+                sid
+            } else {
+                let request = acp::NewSessionRequest {
+                    cwd: std::env::current_dir().unwrap_or_default(),
+                    mcp_servers: vec![],
+                    meta: None,
+                };
+
+                match agent_handle.new_session(request).await {
+                    Ok(resp) => {
+                        let sid = resp.session_id.to_string();
+                        println!("[{}] Created new session: {}", agent_name, sid);
+
+                        // Store the session ID
+                        let agent_name_clone = agent_name.clone();
+                        let sid_clone = sid.clone();
+                        cx.update(|cx| {
+                            if let Some(entity) = sessions_update.upgrade() {
+                                entity.update(cx, |this, _| {
+                                    this.sessions.insert(agent_name_clone, sid_clone);
+                                });
+                            }
+                        })
+                        .ok();
+
+                        sid
+                    }
+                    Err(e) => {
+                        eprintln!("[{}] Failed to create session: {}", agent_name, e);
+                        return;
+                    }
+                }
+            };
+
+            // Send the prompt
+            let request = acp::PromptRequest {
+                session_id: acp::SessionId::from(session_id),
+                prompt: vec![input_text.into()],
+                meta: None,
+            };
+
+            match agent_handle.prompt(request).await {
+                Ok(_) => {
+                    println!("[{}] Prompt sent successfully", agent_name);
+                }
+                Err(e) => {
+                    eprintln!("[{}] Failed to send prompt: {}", agent_name, e);
+                }
+            }
+        })
+        .detach();
+    }
 }
 
 impl Focusable for ChatInputPanel {
@@ -237,6 +346,9 @@ impl Render for ChatInputPanel {
                     .on_context_popover_change(cx.listener(|this, open: &bool, _, cx| {
                         this.context_popover_open = *open;
                         cx.notify();
+                    }))
+                    .on_send(cx.listener(|this, _, window, cx| {
+                        this.send_message(window, cx);
                     }))
                     .mode_select(self.mode_select.clone())
                     .agent_select(self.agent_select.clone()),

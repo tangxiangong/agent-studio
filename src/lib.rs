@@ -42,9 +42,9 @@ pub use welcome_panel::WelcomePanel;
 // Export components
 pub use components::{
     AgentMessage, AgentMessageData, AgentMessageMeta, AgentMessageView, AgentTodoList,
-    AgentTodoListView, MessageContent, MessageContentType, PlanEntry, PlanEntryPriority,
-    PlanEntryStatus, ResourceContent, ToolCallContent, ToolCallData, ToolCallItem,
-    ToolCallItemView, ToolCallKind, ToolCallStatus, UserMessage, UserMessageData, UserMessageView,
+    AgentTodoListView, PlanEntry, PlanEntryPriority, PlanEntryStatus, ToolCallContent,
+    ToolCallData, ToolCallItem, ToolCallItemView, ToolCallKind, ToolCallStatus, UserMessage,
+    UserMessageData, UserMessageView,
 };
 
 use gpui_component::{

@@ -3,143 +3,154 @@ use gpui::{
     ParentElement, Render, RenderOnce, SharedString, Styled, Window,
 };
 
+use agent_client_protocol_schema::{
+    ContentBlock, EmbeddedResource, EmbeddedResourceResource, ResourceLink, SessionId,
+    TextResourceContents,
+};
 use gpui_component::{collapsible::Collapsible, h_flex, v_flex, ActiveTheme, Icon, IconName};
 
-/// Message content type enumeration
-#[derive(Clone, Debug)]
-pub enum MessageContentType {
-    /// Plain text content
-    Text,
-    /// Resource content (file, code, etc.)
-    Resource,
-}
-
-/// Resource information for message content
-#[derive(Clone, Debug)]
-pub struct ResourceContent {
-    /// Resource URI (e.g., file:///path/to/file)
-    pub uri: SharedString,
-    /// MIME type of the resource
-    pub mime_type: SharedString,
-    /// Text content of the resource
-    pub text: SharedString,
-}
-
-impl ResourceContent {
-    pub fn new(
-        uri: impl Into<SharedString>,
-        mime_type: impl Into<SharedString>,
-        text: impl Into<SharedString>,
-    ) -> Self {
-        Self {
-            uri: uri.into(),
-            mime_type: mime_type.into(),
-            text: text.into(),
-        }
-    }
-
-    /// Extract filename from URI
-    pub fn filename(&self) -> SharedString {
-        self.uri
-            .split('/')
-            .last()
-            .unwrap_or("unknown")
-            .to_string()
-            .into()
-    }
-
-    /// Get icon based on MIME type
-    pub fn icon(&self) -> IconName {
-        if self.mime_type.contains("python") {
-            IconName::File
-        } else if self.mime_type.contains("javascript") || self.mime_type.contains("typescript") {
-            IconName::File
-        } else if self.mime_type.contains("rust") {
-            IconName::File
-        } else if self.mime_type.contains("json") {
-            IconName::File
-        } else {
-            IconName::File
-        }
-    }
-}
-
-/// Message content item
-#[derive(Clone, Debug)]
-pub enum MessageContent {
-    /// Plain text content
-    Text { text: SharedString },
-    /// Resource content (file, code, etc.)
-    Resource { resource: ResourceContent },
-}
-
-impl MessageContent {
-    pub fn text(text: impl Into<SharedString>) -> Self {
-        Self::Text { text: text.into() }
-    }
-
-    pub fn resource(resource: ResourceContent) -> Self {
-        Self::Resource { resource }
-    }
-
-    pub fn content_type(&self) -> MessageContentType {
-        match self {
-            Self::Text { .. } => MessageContentType::Text,
-            Self::Resource { .. } => MessageContentType::Resource,
-        }
-    }
-}
-
-/// User message data structure
+/// User message data structure based on ACP's PromptRequest format
 #[derive(Clone, Debug)]
 pub struct UserMessageData {
     /// Session ID
-    pub session_id: SharedString,
-    /// Message content items
-    pub contents: Vec<MessageContent>,
+    pub session_id: SessionId,
+    /// Message content blocks (following ACP ContentBlock format)
+    pub contents: Vec<ContentBlock>,
 }
 
 impl UserMessageData {
-    pub fn new(session_id: impl Into<SharedString>) -> Self {
+    pub fn new(session_id: impl Into<SessionId>) -> Self {
         Self {
             session_id: session_id.into(),
             contents: Vec::new(),
         }
     }
 
-    pub fn with_contents(mut self, contents: Vec<MessageContent>) -> Self {
+    pub fn with_contents(mut self, contents: Vec<ContentBlock>) -> Self {
         self.contents = contents;
         self
     }
 
-    pub fn add_content(mut self, content: MessageContent) -> Self {
+    pub fn add_content(mut self, content: ContentBlock) -> Self {
         self.contents.push(content);
         self
+    }
+
+    /// Add a text content block
+    pub fn add_text(mut self, text: impl Into<String>) -> Self {
+        self.contents.push(ContentBlock::from(text.into()));
+        self
+    }
+
+    /// Add a resource link content block
+    pub fn add_resource_link(
+        mut self,
+        name: impl Into<String>,
+        uri: impl Into<String>,
+    ) -> Self {
+        self.contents
+            .push(ContentBlock::ResourceLink(ResourceLink::new(name, uri)));
+        self
+    }
+
+    /// Add an embedded resource content block
+    pub fn add_embedded_resource(
+        mut self,
+        uri: impl Into<String>,
+        text: impl Into<String>,
+        mime_type: Option<String>,
+    ) -> Self {
+        let mut resource = TextResourceContents::new(text, uri);
+        if let Some(mt) = mime_type {
+            resource = resource.mime_type(mt);
+        }
+        self.contents.push(ContentBlock::Resource(EmbeddedResource::new(
+            EmbeddedResourceResource::TextResourceContents(resource),
+        )));
+        self
+    }
+}
+
+/// Helper to extract display information from ContentBlock
+fn get_resource_info(content: &ContentBlock) -> Option<ResourceInfo> {
+    match content {
+        ContentBlock::ResourceLink(link) => Some(ResourceInfo {
+            uri: link.uri.clone().into(),
+            name: link.name.clone().into(),
+            mime_type: link.mime_type.clone().map(|s| s.into()),
+            text: None,
+        }),
+        ContentBlock::Resource(embedded) => match &embedded.resource {
+            EmbeddedResourceResource::TextResourceContents(text_res) => Some(ResourceInfo {
+                uri: text_res.uri.clone().into(),
+                name: extract_filename(&text_res.uri).into(),
+                mime_type: text_res.mime_type.clone().map(|s| s.into()),
+                text: Some(text_res.text.clone().into()),
+            }),
+            EmbeddedResourceResource::BlobResourceContents(blob_res) => Some(ResourceInfo {
+                uri: blob_res.uri.clone().into(),
+                name: extract_filename(&blob_res.uri).into(),
+                mime_type: blob_res.mime_type.clone().map(|s| s.into()),
+                text: None, // Blob content is not displayable as text
+            }),
+            // Handle future variants
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Extract filename from URI
+fn extract_filename(uri: &str) -> String {
+    uri.split('/').last().unwrap_or("unknown").to_string()
+}
+
+/// Resource information for display
+struct ResourceInfo {
+    uri: SharedString,
+    name: SharedString,
+    mime_type: Option<SharedString>,
+    text: Option<SharedString>,
+}
+
+impl ResourceInfo {
+    /// Get icon based on MIME type
+    fn icon(&self) -> IconName {
+        if let Some(ref mime) = self.mime_type {
+            if mime.contains("python")
+                || mime.contains("javascript")
+                || mime.contains("typescript")
+                || mime.contains("rust")
+                || mime.contains("json")
+            {
+                return IconName::File;
+            }
+        }
+        IconName::File
     }
 }
 
 /// Resource item component (collapsible)
 #[derive(IntoElement)]
 struct ResourceItem {
-    id: ElementId,
-    resource: ResourceContent,
+    resource: ResourceInfo,
     open: bool,
 }
 
 impl ResourceItem {
-    pub fn new(id: impl Into<ElementId>, resource: ResourceContent, open: bool) -> Self {
-        Self {
-            id: id.into(),
-            resource,
-            open,
-        }
+    pub fn new(resource: ResourceInfo, open: bool) -> Self {
+        Self { resource, open }
     }
 }
 
 impl RenderOnce for ResourceItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let filename = self.resource.filename();
-        let line_count = self.resource.text.lines().count();
+        let line_count = self
+            .resource
+            .text
+            .as_ref()
+            .map(|t| t.lines().count())
+            .unwrap_or(0);
 
         Collapsible::new()
             .w_full()
@@ -165,14 +176,16 @@ impl RenderOnce for ResourceItem {
                             .text_size(px(13.))
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .text_color(cx.theme().foreground)
-                            .child(filename),
+                            .child(self.resource.name.clone()),
                     )
-                    .child(
-                        div()
-                            .text_size(px(11.))
-                            .text_color(cx.theme().muted_foreground)
-                            .child(format!("{} lines", line_count)),
-                    )
+                    .when(line_count > 0, |this| {
+                        this.child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("{} lines", line_count)),
+                        )
+                    })
                     .child(
                         Icon::new(if self.open {
                             IconName::ChevronUp
@@ -183,8 +196,8 @@ impl RenderOnce for ResourceItem {
                         .text_color(cx.theme().muted_foreground),
                     ),
             )
-            // Content - code display
-            .when(self.open, |this| {
+            // Content - code display (only if we have text)
+            .when(self.open && self.resource.text.is_some(), |this| {
                 this.content(
                     div()
                         .w_full()
@@ -199,7 +212,7 @@ impl RenderOnce for ResourceItem {
                                 .font_family("Monaco, 'Courier New', monospace")
                                 .text_color(cx.theme().foreground)
                                 .line_height(px(18.))
-                                .child(self.resource.text),
+                                .child(self.resource.text.clone().unwrap_or_default()),
                         ),
                 )
             })
@@ -219,7 +232,7 @@ impl UserMessage {
         let resource_count = data
             .contents
             .iter()
-            .filter(|c| matches!(c, MessageContent::Resource { .. }))
+            .filter(|c| matches!(c, ContentBlock::ResourceLink(_) | ContentBlock::Resource(_)))
             .count();
 
         Self {
@@ -268,29 +281,33 @@ impl RenderOnce for UserMessage {
                     .gap_3()
                     .pl_6()
                     .w_full()
-                    .children(self.data.contents.into_iter().map(|content| {
-                        match content {
-                            MessageContent::Text { text } => div()
-                                .text_size(px(14.))
-                                .text_color(cx.theme().foreground)
-                                .line_height(px(22.))
-                                .child(text)
-                                .into_any_element(),
-                            MessageContent::Resource { resource } => {
-                                let current_index = resource_index;
-                                resource_index += 1;
-                                let open = self
-                                    .resource_states
-                                    .get(current_index)
-                                    .copied()
-                                    .unwrap_or(false);
-                                let id = SharedString::from(format!(
-                                    "{}-resource-{}",
-                                    self.id, current_index
-                                ));
+                    .children(self.data.contents.into_iter().filter_map(|content| {
+                        match &content {
+                            ContentBlock::Text(text_content) => Some(
+                                div()
+                                    .text_size(px(14.))
+                                    .text_color(cx.theme().foreground)
+                                    .line_height(px(22.))
+                                    .child(text_content.text.clone())
+                                    .into_any_element(),
+                            ),
+                            ContentBlock::ResourceLink(_) | ContentBlock::Resource(_) => {
+                                if let Some(resource_info) = get_resource_info(&content) {
+                                    let current_index = resource_index;
+                                    resource_index += 1;
+                                    let open = self
+                                        .resource_states
+                                        .get(current_index)
+                                        .copied()
+                                        .unwrap_or(false);
 
-                                ResourceItem::new(id, resource, open).into_any_element()
+                                    Some(ResourceItem::new(resource_info, open).into_any_element())
+                                } else {
+                                    None
+                                }
                             }
+                            // Skip other content types for now (Image, Audio)
+                            _ => None,
                         }
                     })),
             )
@@ -308,7 +325,7 @@ impl UserMessageView {
         let resource_count = data
             .contents
             .iter()
-            .filter(|c| matches!(c, MessageContent::Resource { .. }))
+            .filter(|c| matches!(c, ContentBlock::ResourceLink(_) | ContentBlock::Resource(_)))
             .count();
 
         cx.new(|cx| {
@@ -327,7 +344,7 @@ impl UserMessageView {
         let resource_count = data
             .contents
             .iter()
-            .filter(|c| matches!(c, MessageContent::Resource { .. }))
+            .filter(|c| matches!(c, ContentBlock::ResourceLink(_) | ContentBlock::Resource(_)))
             .count();
 
         self.data.update(cx, |d, cx| {
@@ -344,8 +361,9 @@ impl UserMessageView {
     }
 
     /// Add content to the message
-    pub fn add_content(&mut self, content: MessageContent, cx: &mut Context<Self>) {
-        let is_resource = matches!(content, MessageContent::Resource { .. });
+    pub fn add_content(&mut self, content: ContentBlock, cx: &mut Context<Self>) {
+        let is_resource =
+            matches!(content, ContentBlock::ResourceLink(_) | ContentBlock::Resource(_));
 
         self.data.update(cx, |d, cx| {
             d.contents.push(content);

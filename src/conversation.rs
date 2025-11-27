@@ -3,17 +3,20 @@ use gpui::{
     ParentElement, Pixels, Render, Styled, Window,
 };
 
-use agent_client_protocol_schema::{ContentBlock, ContentChunk, ImageContent, TextContent};
+use agent_client_protocol_schema::{
+    BlobResourceContents, ContentBlock, ContentChunk, EmbeddedResource, EmbeddedResourceResource,
+    ImageContent, ResourceLink, TextContent, TextResourceContents,
+};
 use gpui_component::{scroll::ScrollbarAxis, v_flex, ActiveTheme, StyledExt};
 
 use crate::{
     conversation_schema::{
-        AgentMessageDataSchema, ContentBlockSchema, ConversationItem, MessageContentSchema, PlanEntrySchema,
-        ToolCallItemSchema, UserMessageDataSchema,
+        AgentMessageDataSchema, ContentBlockSchema, ConversationItem, PlanEntrySchema,
+        ResourceContentsSchema, ToolCallItemSchema, UserMessageDataSchema,
     },
-    AgentMessage, AgentMessageData, AgentMessageMeta, AgentTodoList, MessageContent, PlanEntry,
-    PlanEntryPriority, PlanEntryStatus, ResourceContent, ToolCallContent, ToolCallData,
-    ToolCallItem, ToolCallKind, ToolCallStatus, UserMessage, UserMessageData,
+    AgentMessage, AgentMessageData, AgentMessageMeta, AgentTodoList, PlanEntry, PlanEntryPriority,
+    PlanEntryStatus, ToolCallContent, ToolCallData, ToolCallItem, ToolCallKind, ToolCallStatus,
+    UserMessage, UserMessageData,
 };
 
 pub struct ConversationPanel {
@@ -65,19 +68,50 @@ impl ConversationPanel {
 
     fn map_user_message(id: String, data: UserMessageDataSchema) -> UserMessage {
         let mut user_data = UserMessageData::new(data.session_id);
-        for content in data.contents {
-            match content {
-                MessageContentSchema::Text { text } => {
-                    user_data = user_data.add_content(MessageContent::text(text));
+
+        // Convert content blocks from schema to ACP types
+        for content_schema in data.prompt {
+            let content_block = Self::map_content_block(content_schema);
+            user_data.contents.push(content_block);
+        }
+
+        UserMessage::new(Self::get_id(&id), user_data)
+    }
+
+    /// Convert schema ContentBlock to ACP ContentBlock
+    fn map_content_block(schema: ContentBlockSchema) -> ContentBlock {
+        match schema {
+            ContentBlockSchema::Text(text) => ContentBlock::Text(TextContent::new(text.text)),
+            ContentBlockSchema::Image(image) => {
+                ContentBlock::Image(ImageContent::new(image.data, image.mime_type))
+            }
+            ContentBlockSchema::ResourceLink(link) => {
+                let mut resource_link = ResourceLink::new(link.name, link.uri);
+                if let Some(mime) = link.mime_type {
+                    resource_link = resource_link.mime_type(mime);
                 }
-                MessageContentSchema::Resource { resource } => {
-                    user_data = user_data.add_content(MessageContent::resource(
-                        ResourceContent::new(resource.uri, resource.mime_type, resource.text),
-                    ));
-                }
+                ContentBlock::ResourceLink(resource_link)
+            }
+            ContentBlockSchema::Resource(embedded) => {
+                let resource = match embedded.resource {
+                    ResourceContentsSchema::TextResourceContents(text_res) => {
+                        let mut content = TextResourceContents::new(text_res.text, text_res.uri);
+                        if let Some(mime) = text_res.mime_type {
+                            content = content.mime_type(mime);
+                        }
+                        EmbeddedResourceResource::TextResourceContents(content)
+                    }
+                    ResourceContentsSchema::BlobResourceContents(blob_res) => {
+                        let mut content = BlobResourceContents::new(blob_res.blob, blob_res.uri);
+                        if let Some(mime) = blob_res.mime_type {
+                            content = content.mime_type(mime);
+                        }
+                        EmbeddedResourceResource::BlobResourceContents(content)
+                    }
+                };
+                ContentBlock::Resource(EmbeddedResource::new(resource))
             }
         }
-        UserMessage::new(Self::get_id(&id), user_data)
     }
 
     fn map_agent_message(id: String, data: AgentMessageDataSchema) -> AgentMessage {
@@ -93,12 +127,7 @@ impl ConversationPanel {
 
         // Convert content chunks
         for chunk_schema in data.chunks {
-            let content_block = match chunk_schema.content {
-                ContentBlockSchema::Text(text) => ContentBlock::Text(TextContent::new(text.text)),
-                ContentBlockSchema::Image(image) => {
-                    ContentBlock::Image(ImageContent::new(image.data, image.mime_type))
-                }
-            };
+            let content_block = Self::map_content_block(chunk_schema.content);
             let mut content_chunk = ContentChunk::new(content_block);
             if let Some(meta) = chunk_schema.meta {
                 content_chunk = content_chunk.meta(meta);

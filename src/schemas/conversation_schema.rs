@@ -20,24 +20,94 @@ pub enum ConversationItem {
     },
 }
 
+/// User message data schema aligned with ACP's PromptRequest format
 #[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct UserMessageDataSchema {
     pub session_id: String,
-    pub contents: Vec<MessageContentSchema>,
+    /// Content blocks following ACP ContentBlock structure
+    pub prompt: Vec<ContentBlockSchema>,
 }
 
+/// Content block schema aligned with ACP's ContentBlock enum
 #[derive(Debug, Deserialize, Clone)]
-#[serde(tag = "type")]
-pub enum MessageContentSchema {
-    Text { text: String },
-    Resource { resource: ResourceContentSchema },
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentBlockSchema {
+    Text(TextContentSchema),
+    Image(ImageContentSchema),
+    ResourceLink(ResourceLinkSchema),
+    Resource(EmbeddedResourceSchema),
 }
 
+/// Text content schema
 #[derive(Debug, Deserialize, Clone)]
-pub struct ResourceContentSchema {
-    pub uri: String,
-    pub mime_type: String,
+pub struct TextContentSchema {
     pub text: String,
+    #[serde(rename = "_meta")]
+    pub meta: Option<serde_json::Value>,
+}
+
+/// Image content schema
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageContentSchema {
+    pub data: String,
+    pub mime_type: String,
+    #[serde(rename = "_meta")]
+    pub meta: Option<serde_json::Value>,
+}
+
+/// Resource link schema (reference to a resource without embedding content)
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceLinkSchema {
+    pub name: String,
+    pub uri: String,
+    #[serde(default)]
+    pub mime_type: Option<String>,
+    #[serde(rename = "_meta")]
+    pub meta: Option<serde_json::Value>,
+}
+
+/// Embedded resource schema (contains the actual content)
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddedResourceSchema {
+    pub resource: ResourceContentsSchema,
+    #[serde(rename = "_meta")]
+    pub meta: Option<serde_json::Value>,
+}
+
+/// Resource contents schema (text or blob)
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ResourceContentsSchema {
+    TextResourceContents(TextResourceContentsSchema),
+    BlobResourceContents(BlobResourceContentsSchema),
+}
+
+/// Text resource contents schema
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TextResourceContentsSchema {
+    pub uri: String,
+    pub text: String,
+    #[serde(default)]
+    pub mime_type: Option<String>,
+    #[serde(rename = "_meta")]
+    pub meta: Option<serde_json::Value>,
+}
+
+/// Blob resource contents schema
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BlobResourceContentsSchema {
+    pub uri: String,
+    pub blob: String,
+    #[serde(default)]
+    pub mime_type: Option<String>,
+    #[serde(rename = "_meta")]
+    pub meta: Option<serde_json::Value>,
 }
 
 /// Agent message data schema aligned with ACP's ContentChunk format
@@ -59,33 +129,6 @@ pub struct ContentChunkSchema {
     /// Content block following ACP's ContentBlock structure
     pub content: ContentBlockSchema,
     /// Extension point for implementations
-    #[serde(rename = "_meta")]
-    pub meta: Option<serde_json::Value>,
-}
-
-/// Content block schema aligned with ACP's ContentBlock enum
-#[derive(Debug, Deserialize, Clone)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ContentBlockSchema {
-    Text(TextContentSchema),
-    Image(ImageContentSchema),
-    // Add other content types as needed
-}
-
-/// Text content schema
-#[derive(Debug, Deserialize, Clone)]
-pub struct TextContentSchema {
-    pub text: String,
-    #[serde(rename = "_meta")]
-    pub meta: Option<serde_json::Value>,
-}
-
-/// Image content schema
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ImageContentSchema {
-    pub data: String,
-    pub mime_type: String,
     #[serde(rename = "_meta")]
     pub meta: Option<serde_json::Value>,
 }

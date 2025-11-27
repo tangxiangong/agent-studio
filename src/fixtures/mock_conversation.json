@@ -3,17 +3,18 @@
     "type": "UserMessage",
     "id": "msg-1",
     "data": {
-      "session_id": "sess_001",
-      "contents": [
+      "sessionId": "sess_001",
+      "prompt": [
         {
-          "type": "Text",
+          "type": "text",
           "text": "Can you help me refactor this authentication code? I think there might be some security issues."
         },
         {
-          "type": "Resource",
+          "type": "resource",
           "resource": {
+            "type": "text_resource_contents",
             "uri": "file:///src/auth.rs",
-            "mime_type": "text/rust",
+            "mimeType": "text/rust",
             "text": "pub fn authenticate(username: &str, password: &str) -> bool {\n    let stored_password = get_password_from_db(username);\n    password == stored_password\n}"
           }
         }
@@ -151,10 +152,10 @@
     "type": "UserMessage",
     "id": "msg-8",
     "data": {
-      "session_id": "sess_001",
-      "contents": [
+      "sessionId": "sess_001",
+      "prompt": [
         {
-          "type": "Text",
+          "type": "text",
           "text": "Great! Can you also add rate limiting? I'm worried about brute force attacks."
         }
       ]
@@ -239,17 +240,18 @@
     "type": "UserMessage",
     "id": "msg-13",
     "data": {
-      "session_id": "sess_001",
-      "contents": [
+      "sessionId": "sess_001",
+      "prompt": [
         {
-          "type": "Text",
+          "type": "text",
           "text": "While you're at it, can you also review this session management code?"
         },
         {
-          "type": "Resource",
+          "type": "resource",
           "resource": {
+            "type": "text_resource_contents",
             "uri": "file:///src/session.rs",
-            "mime_type": "text/rust",
+            "mimeType": "text/rust",
             "text": "pub struct Session {\n    user_id: String,\n    token: String,\n    created_at: i64,\n}\n\nimpl Session {\n    pub fn new(user_id: String) -> Self {\n        Self {\n            user_id,\n            token: generate_token(),\n            created_at: now(),\n        }\n    }\n}"
           }
         }

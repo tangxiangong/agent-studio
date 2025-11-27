@@ -18,7 +18,4 @@ pub use tool_call_item::{
     ToolCallContent, ToolCallData, ToolCallItem, ToolCallItemView, ToolCallKind, ToolCallStatus,
 };
 
-pub use user_message::{
-    MessageContent, MessageContentType, ResourceContent, UserMessage, UserMessageData,
-    UserMessageView,
-};
+pub use user_message::{UserMessage, UserMessageData, UserMessageView};

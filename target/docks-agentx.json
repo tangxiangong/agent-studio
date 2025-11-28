@@ -11,7 +11,7 @@
             "children": [],
             "info": {
               "panel": {
-                "story_klass": "ConversationPanel"
+                "story_klass": "ConversationPanelAcp"
               }
             }
           }

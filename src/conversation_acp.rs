@@ -461,12 +461,15 @@ pub struct ConversationPanelAcp {
 
 impl ConversationPanelAcp {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        log::info!("🚀 Creating ConversationPanelAcp view");
         let entity = cx.new(|cx| Self::new(window, cx));
         Self::subscribe_to_updates(&entity, cx);
+        log::info!("✅ ConversationPanelAcp view created and subscribed");
         entity
     }
 
     fn new(_window: &mut Window, cx: &mut App) -> Self {
+        log::info!("🔧 Initializing ConversationPanelAcp (new)");
         let focus_handle = cx.focus_handle();
         let session_updates = Self::load_mock_data();
 

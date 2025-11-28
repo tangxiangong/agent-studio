@@ -13,7 +13,7 @@ use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    AppState, AppTitleBar, ChatInputPanel, CodeEditorPanel, ConversationPanel, CreateTaskFromWelcome, ListTaskPanel, Open, ShowConversationPanel, ShowWelcomePanel, WelcomePanel, collapsible_story::CollapsibleStory, dock_panel::DockPanelContainer
+    AppState, AppTitleBar, ChatInputPanel, CodeEditorPanel, ConversationPanelAcp, CreateTaskFromWelcome, ListTaskPanel, Open, ShowConversationPanel, ShowWelcomePanel, WelcomePanel, collapsible_story::CollapsibleStory, dock_panel::DockPanelContainer
 };
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -309,9 +309,9 @@ impl DockWorkspace {
         DockItem::split_with_sizes(
             Axis::Horizontal,
             vec![
-                // Left panel: CodeEditorPanel
+                // Left panel: ConversationPanelAcp (ACP-enabled conversation)
                 DockItem::tabs(
-                    vec![Arc::new(DockPanelContainer::panel::<ConversationPanel>(
+                    vec![Arc::new(DockPanelContainer::panel::<ConversationPanelAcp>(
                         window, cx,
                     ))],
                     None,
@@ -385,10 +385,10 @@ impl DockWorkspace {
     ) {
         // Random pick up a panel to add
         let panel = match rand::random::<usize>() % 2 {
-            0 => Arc::new(DockPanelContainer::panel::<ConversationPanel>(window, cx)),
-            1 => Arc::new(DockPanelContainer::panel::<ConversationPanel>(window, cx)),
-            // 2 => Arc::new(DockPanelContainer::panel::<ConversationPanel>(window, cx)),
-            _ => Arc::new(DockPanelContainer::panel::<ConversationPanel>(window, cx)),
+            0 => Arc::new(DockPanelContainer::panel::<ConversationPanelAcp>(window, cx)),
+            1 => Arc::new(DockPanelContainer::panel::<ConversationPanelAcp>(window, cx)),
+            // 2 => Arc::new(DockPanelContainer::panel::<ConversationPanelAcp>(window, cx)),
+            _ => Arc::new(DockPanelContainer::panel::<ConversationPanelAcp>(window, cx)),
         };
 
         self.dock_area.update(cx, |dock_area, cx| {
@@ -428,9 +428,9 @@ impl DockWorkspace {
         });
     }
 
-    /// Helper method to create and show ConversationPanel in the center
+    /// Helper method to create and show ConversationPanelAcp in the center
     fn show_conversation_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let conversation_panel = DockPanelContainer::panel::<ConversationPanel>(window, cx);
+        let conversation_panel = DockPanelContainer::panel::<ConversationPanelAcp>(window, cx);
         let conversation_item =
             DockItem::tab(conversation_panel, &self.dock_area.downgrade(), window, cx);
 

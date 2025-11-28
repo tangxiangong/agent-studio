@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
-use gpui::{Action, App, SharedString};
-use gpui_component::{scroll::ScrollbarShow, ActiveTheme, Theme, ThemeMode, ThemeRegistry};
+use gpui::{App, SharedString};
+use gpui_component::{scroll::ScrollbarShow, ActiveTheme, Theme, ThemeRegistry};
 use serde::{Deserialize, Serialize};
+
+use crate::app::actions::{SwitchTheme, SwitchThemeMode};
 
 const STATE_FILE: &str = "target/state.json";
 
@@ -69,11 +71,3 @@ pub fn init(cx: &mut App) {
         cx.refresh_windows();
     });
 }
-
-#[derive(Action, Clone, PartialEq)]
-#[action(namespace = themes, no_json)]
-pub(crate) struct SwitchTheme(pub(crate) SharedString);
-
-#[derive(Action, Clone, PartialEq)]
-#[action(namespace = themes, no_json)]
-pub(crate) struct SwitchThemeMode(pub(crate) ThemeMode);

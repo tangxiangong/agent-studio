@@ -2,7 +2,7 @@ use gpui::{App, Menu, MenuItem, SharedString};
 use gpui_component::{ThemeMode, ThemeRegistry};
 
 use crate::{
-    themes::{SwitchTheme, SwitchThemeMode},
+    app::actions::{SwitchTheme, SwitchThemeMode},
     About, CloseWindow, Open, Quit, SelectLocale, ToggleSearch,
 };
 

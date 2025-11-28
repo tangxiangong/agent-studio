@@ -13,7 +13,9 @@ use gpui_component::{
     v_flex, ActiveTheme, IndexPath, StyledExt,
 };
 
-use crate::{components::ChatInputBox, workspace::AddSessionPanel, AddSessionToList, AppState};
+use crate::{
+    components::ChatInputBox, AddSessionPanel, AddSessionToList, AppState,
+};
 
 /// Delegate for the context list in the chat input popover
 struct ContextListDelegate {
@@ -266,9 +268,12 @@ impl WelcomePanel {
             state.set_value("", window, cx);
         });
 
+        // Store action data before spawning async task
+        let input_text_for_actions = input_text.clone();
+
         // Spawn async task to send the message
         let sessions_update = cx.entity().downgrade();
-        cx.spawn(async move |_this, cx| {
+        cx.spawn_in(window, async move |_this, window| {
             use agent_client_protocol as acp;
 
             // Create a new session if needed
@@ -289,35 +294,40 @@ impl WelcomePanel {
                         // Store the session ID
                         let agent_name_clone = agent_name.clone();
                         let sid_clone = sid.clone();
-                        cx.update(|cx| {
-                            if let Some(entity) = sessions_update.upgrade() {
-                                entity.update(cx, |this, _| {
-                                    this.sessions.insert(agent_name_clone, sid_clone);
-                                });
-                            }
-                        })
-                        .ok();
+                        window
+                            .update(|_, cx| {
+                                if let Some(entity) = sessions_update.upgrade() {
+                                    entity.update(cx, |this, _| {
+                                        this.sessions.insert(agent_name_clone, sid_clone);
+                                    });
+                                }
+                            })
+                            .ok();
 
-                        // Create and dispatch action to add session panel
+                        // Dispatch actions in window context
                         let sid_for_panel = sid.clone();
-                        let input_text_for_list = input_text.clone();
+                        let input_text_for_list = input_text_for_actions.clone();
                         let sid_for_list = sid.clone();
-                        cx.update(|cx| {
-                            // Add session panel
-                            let action = AddSessionPanel {
-                                session_id: sid_for_panel,
-                                placement: DockPlacement::Center,
-                            };
-                            cx.dispatch_action(&action);
 
-                            // Add session to list panel
-                            let list_action = AddSessionToList {
-                                session_id: sid_for_list,
-                                task_name: input_text_for_list,
-                            };
-                            cx.dispatch_action(&list_action);
-                        })
-                        .ok();
+                        window
+                            .update(|_, cx| {
+                                // Add session panel
+                                let panel_action = AddSessionPanel {
+                                    session_id: sid_for_panel,
+                                    placement: DockPlacement::Center,
+                                };
+                                cx.dispatch_action(&panel_action);
+
+                                // Add session to list panel
+                                let list_action = AddSessionToList {
+                                    session_id: sid_for_list,
+                                    task_name: input_text_for_list,
+                                };
+                                cx.dispatch_action(&list_action);
+
+                                log::info!("Dispatched AddSessionPanel and AddSessionToList actions");
+                            })
+                            .ok();
 
                         sid
                     }
@@ -342,10 +352,11 @@ impl WelcomePanel {
             };
 
             // Publish to session bus
-            cx.update(|cx| {
-                AppState::global(cx).session_bus.publish(user_event);
-            })
-            .ok();
+            window
+                .update(|_, cx| {
+                    AppState::global(cx).session_bus.publish(user_event);
+                })
+                .ok();
             log::info!("Published user message to session bus: {}", session_id);
 
             // Send the prompt

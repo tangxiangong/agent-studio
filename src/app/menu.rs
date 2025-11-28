@@ -1,8 +1,9 @@
+use crate::app::actions::{Copy, Cut, Info, Paste, SearchAll, ToggleCheck};
 use crate::dock_panel::section;
 use crate::dock_panel::DockPanel;
 use gpui::{
-    actions, div, px, Action, App, AppContext, Context, Corner, Entity, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Render, SharedString, Styled as _, Window,
+    div, px, App, AppContext, Context, Corner, Entity, InteractiveElement, IntoElement,
+    KeyBinding, ParentElement as _, Render, SharedString, Styled as _, Window,
 };
 use gpui_component::{
     button::Button,
@@ -10,13 +11,6 @@ use gpui_component::{
     menu::{ContextMenuExt, DropdownMenu as _, PopupMenuItem},
     v_flex, ActiveTheme as _, IconName, StyledExt,
 };
-use serde::Deserialize;
-
-#[derive(Action, Clone, PartialEq, Deserialize)]
-#[action(namespace = menu_story, no_json)]
-struct Info(usize);
-
-actions!(menu_story, [Copy, Paste, Cut, SearchAll, ToggleCheck]);
 
 const CONTEXT: &str = "menu_story";
 pub fn init(cx: &mut App) {

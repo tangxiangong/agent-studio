@@ -8,44 +8,14 @@ use gpui_component::{
     menu::DropdownMenu,
     IconName, Root, Sizable,
 };
-use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    dock_panel::DockPanelContainer, AppState, AppTitleBar,
-    ChatInputPanel, CodeEditorPanel, ConversationPanelAcp, CreateTaskFromWelcome, ListTaskPanel, ShowConversationPanel, ShowWelcomePanel, WelcomePanel,
+    app::actions::{AddPanel, AddSessionPanel, ToggleDockToggleButton, TogglePanelVisible},
+    dock_panel::DockPanelContainer,
+    AppState, AppTitleBar, ChatInputPanel, CodeEditorPanel, ConversationPanelAcp,
+    CreateTaskFromWelcome, ListTaskPanel, ShowConversationPanel, ShowWelcomePanel, WelcomePanel,
 };
-
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct AddPanel(DockPlacement);
-
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct TogglePanelVisible(SharedString);
-
-fn default_dock_placement() -> DockPlacement {
-    DockPlacement::Center
-}
-
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct AddSessionPanel {
-    pub session_id: String,
-    #[serde(skip, default = "default_dock_placement")]
-    pub placement: DockPlacement,
-}
-
-impl Default for AddSessionPanel {
-    fn default() -> Self {
-        Self {
-            session_id: String::new(),
-            placement: DockPlacement::Center,
-        }
-    }
-}
-
-actions!(story, [ToggleDockToggleButton]);
 
 const MAIN_DOCK_AREA: DockAreaTab = DockAreaTab {
     id: "main-dock",
@@ -429,7 +399,7 @@ impl DockWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        log::info!("Creating session panel for: {}", action.session_id);
+        log::info!("Received AddSessionPanel action: session_id={}", action.session_id);
 
         // Create a new ConversationPanelAcp panel container for this specific session
         let panel = Arc::new(DockPanelContainer::panel_for_session(
@@ -441,6 +411,8 @@ impl DockWorkspace {
         self.dock_area.update(cx, |dock_area, cx| {
             dock_area.add_panel(panel, action.placement, None, window, cx);
         });
+
+        log::info!("Added session panel for: {}", action.session_id);
     }
 
     fn on_action_toggle_panel_visible(

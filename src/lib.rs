@@ -24,22 +24,29 @@ use crate::{
     dock_panel::{DockPanel, DockPanelContainer, DockPanelState},
     session_bus::SessionUpdateBusContainer,
 };
-pub use app::{app_menus, menu, themes, title_bar};
+pub use app::{
+    actions::{
+        About, AddPanel, AddSessionPanel, AddSessionToList, CloseWindow, CreateTaskFromWelcome,
+        Info, Open, Quit, SelectedAgentTask, SelectFont, SelectLocale, SelectRadius,
+        SelectScrollbarShow, ShowConversationPanel, ShowPanelInfo, ShowWelcomePanel, Tab, TabPrev,
+        TestAction, ToggleDockToggleButton, TogglePanelVisible, ToggleSearch,
+    },
+    app_menus, menu, themes, title_bar,
+};
 pub use chat_input::ChatInputPanel;
 pub use code_editor::CodeEditorPanel;
 pub use config::{AgentProcessConfig, Config, Settings};
 pub use conversation::ConversationPanel;
 pub use conversation_acp::ConversationPanelAcp;
 use gpui::{
-    actions, div, px, size, Action, AnyView, App,
-    AppContext, Bounds, Context, Entity, Global, IntoElement, KeyBinding, ParentElement, Pixels,
-    Render, SharedString, Size, Styled, Window, WindowBounds, WindowKind, WindowOptions,
+    div, px, size, Action, AnyView, App, AppContext, Bounds, Context, Entity, Global, IntoElement,
+    KeyBinding, ParentElement, Pixels, Render, SharedString, Size, Styled, Window, WindowBounds,
+    WindowKind, WindowOptions,
 };
 pub use menu::UIMenu;
 pub use schemas::{conversation_schema, task_schema};
-use serde::Deserialize;
 pub use settings_window::SettingsWindow;
-pub use task_list::{AddSessionToList, ListTaskPanel};
+pub use task_list::ListTaskPanel;
 pub use task_turn_view::CollapsibleEventTurn;
 pub use title_bar::AppTitleBar;
 pub use welcome_panel::WelcomePanel;
@@ -63,43 +70,6 @@ use gpui_component::{
     v_flex, Root, TitleBar,
 };
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
-
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct SelectScrollbarShow(ScrollbarShow);
-
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct SelectLocale(SharedString);
-
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct SelectFont(usize);
-
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct SelectRadius(usize);
-
-actions!(
-    story,
-    [
-        About,
-        Open,
-        Quit,
-        CloseWindow,
-        ToggleSearch,
-        TestAction,
-        Tab,
-        TabPrev,
-        ShowPanelInfo,
-        ShowWelcomePanel,
-        ShowConversationPanel
-    ]
-);
-
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct CreateTaskFromWelcome(pub SharedString);
 
 const PANEL_NAME: &str = "DockPanelContainer";
 

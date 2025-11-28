@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc, time::Duration};
 
 use gpui::{
-    actions, div, px, Action, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    div, px, Action, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, MouseButton, ParentElement, Render, SharedString, Styled, Subscription, Task,
     Timer, Window,
 };
@@ -11,23 +11,14 @@ use gpui_component::{
     list::{List, ListDelegate, ListEvent, ListState},
     v_flex, ActiveTheme, Icon, IconName, IndexPath,
 };
-use serde::Deserialize;
 
 use agent_client_protocol_schema::{ContentBlock, SessionUpdate};
 
+use crate::app::actions::{AddSessionToList, SelectedAgentTask};
 use crate::components::TaskListItem;
 use crate::task_data::{load_mock_tasks, random_status};
 use crate::task_schema::{AgentTask, TaskStatus};
 use crate::{AppState, CreateTaskFromWelcome, ShowConversationPanel, ShowWelcomePanel};
-
-actions!(list_task, [SelectedAgentTask]);
-
-#[derive(Clone, Action, PartialEq, Eq, Deserialize)]
-#[action(namespace = list_task, no_json)]
-pub struct AddSessionToList {
-    pub session_id: String,
-    pub task_name: String,
-}
 
 struct TaskListDelegate {
     industries: Vec<SharedString>,
@@ -592,11 +583,17 @@ impl ListTaskPanel {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        log::info!(
+            "Received AddSessionToList action: session_id={}, task_name={}",
+            action.session_id,
+            action.task_name
+        );
+
         let task_name = action.task_name.clone();
         let session_id = action.session_id.clone();
 
         // Create a new task for this session
-        let new_task = AgentTask::new_for_session(task_name, session_id);
+        let new_task = AgentTask::new_for_session(task_name, session_id.clone());
 
         // Add task to the beginning of the list in the "Default" section
         self.task_list.update(cx, |list, cx| {
@@ -606,7 +603,7 @@ impl ListTaskPanel {
             cx.notify();
         });
 
-        log::info!("Added session to list: {}", action.session_id);
+        log::info!("Added session to list: {}", session_id);
     }
 
     /// Handle click on "New Task" button - shows the welcome panel

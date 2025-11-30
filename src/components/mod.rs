@@ -4,6 +4,7 @@ mod chat_input_box;
 mod task_list_item;
 mod tool_call_item;
 mod user_message;
+mod permission_request;
 
 pub use agent_message::{AgentMessage, AgentMessageData, AgentMessageMeta, AgentMessageView};
 
@@ -15,3 +16,7 @@ pub use task_list_item::TaskListItem;
 pub use tool_call_item::{ToolCallItem, ToolCallItemView, ToolCallStatusExt, ToolKindExt};
 
 pub use user_message::{UserMessage, UserMessageData, UserMessageView};
+
+pub use permission_request::{
+    PermissionOptionData, PermissionOptionKind, PermissionRequest, PermissionRequestView,
+};

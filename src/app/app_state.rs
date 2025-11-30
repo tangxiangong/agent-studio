@@ -5,6 +5,7 @@ use gpui::{App, AppContext, Entity, Global, SharedString};
 use crate::{
     acp_client::{AgentManager, PermissionStore},
     session_bus::SessionUpdateBusContainer,
+    permission_bus::PermissionBusContainer,
 };
 
 pub struct AppState {
@@ -12,6 +13,7 @@ pub struct AppState {
     agent_manager: Option<Arc<AgentManager>>,
     permission_store: Option<Arc<PermissionStore>>,
     pub session_bus: SessionUpdateBusContainer,
+    pub permission_bus: PermissionBusContainer,
 }
 
 impl AppState {
@@ -21,6 +23,7 @@ impl AppState {
             agent_manager: None,
             permission_store: None,
             session_bus: SessionUpdateBusContainer::new(),
+            permission_bus: PermissionBusContainer::new(),
         };
         cx.set_global::<AppState>(state);
     }

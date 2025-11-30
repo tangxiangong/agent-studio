@@ -17,7 +17,8 @@ use agent_client_protocol_schema::{
 };
 
 use crate::{
-    dock_panel::DockPanel, AgentMessage, AgentMessageData, AgentTodoList, AppState, UserMessageData,
+    dock_panel::DockPanel, AgentMessage, AgentMessageData, AgentTodoList, AppState,
+    PermissionRequestView, UserMessageData,
 };
 
 // ============================================================================
@@ -469,6 +470,8 @@ enum RenderedItem {
     ToolCall(Entity<ToolCallItemState>),
     // Simple text updates for commands and mode changes
     InfoUpdate(String),
+    // Permission request
+    PermissionRequest(Entity<PermissionRequestView>),
 }
 
 /// Conversation panel that displays SessionUpdate messages from ACP
@@ -488,6 +491,7 @@ impl ConversationPanelAcp {
         log::info!("🚀 Creating ConversationPanelAcp view");
         let entity = cx.new(|cx| Self::new(window, cx));
         Self::subscribe_to_updates(&entity, None, cx);
+        Self::subscribe_to_permissions(&entity, None, cx);
         log::info!("✅ ConversationPanelAcp view created and subscribed");
         entity
     }
@@ -500,6 +504,7 @@ impl ConversationPanelAcp {
         );
         let entity = cx.new(|cx| Self::new_for_session(session_id.clone(), cx));
         Self::subscribe_to_updates(&entity, Some(session_id.clone()), cx);
+        Self::subscribe_to_permissions(&entity, Some(session_id.clone()), cx);
         log::info!(
             "✅ ConversationPanelAcp created for session: {}",
             session_id
@@ -609,6 +614,97 @@ impl ConversationPanelAcp {
 
         let filter_log_str = filter_log.as_deref().unwrap_or("all sessions");
         log::info!("Subscribed to session bus for: {}", filter_log_str);
+    }
+
+    /// Subscribe to permission requests after the entity is created
+    pub fn subscribe_to_permissions(
+        entity: &Entity<Self>,
+        session_filter: Option<String>,
+        cx: &mut App,
+    ) {
+        let weak_entity = entity.downgrade();
+        let permission_bus = AppState::global(cx).permission_bus.clone();
+
+        // Create unbounded channel for cross-thread communication
+        let (tx, mut rx) =
+            tokio::sync::mpsc::unbounded_channel::<crate::permission_bus::PermissionRequestEvent>(
+            );
+
+        // Clone session_filter for logging after the closure
+        let filter_log = session_filter.clone();
+        let filter_log_inner = session_filter.clone();
+
+        // Subscribe to permission bus, send requests to channel in callback
+        permission_bus.subscribe(move |event| {
+            // Filter by session_id if specified
+            if let Some(ref filter_id) = session_filter {
+                if &event.session_id != filter_id {
+                    return; // Skip this permission request
+                }
+            }
+
+            // This callback runs in agent I/O thread
+            let _ = tx.send(event.clone());
+            log::info!(
+                "Permission request sent to channel: permission_id={}, session_id={}",
+                event.permission_id,
+                event.session_id
+            );
+        });
+
+        // Spawn background task to receive from channel and update entity
+        cx.spawn(async move |cx| {
+            log::info!(
+                "Starting permission background task for session: {}",
+                filter_log_inner.as_deref().unwrap_or("all")
+            );
+            while let Some(event) = rx.recv().await {
+                log::info!(
+                    "Permission background task received request for session: {}",
+                    event.session_id
+                );
+                let weak = weak_entity.clone();
+                let _ = cx.update(|cx| {
+                    if let Some(entity) = weak.upgrade() {
+                        entity.update(cx, |this, cx| {
+                            log::info!(
+                                "Processing permission request: permission_id={}",
+                                event.permission_id
+                            );
+                            // Create PermissionRequestView entity using cx.new
+                            let permission_view = cx.new(|cx| {
+                                let inner = cx.new(|_| {
+                                    crate::PermissionRequest::new(
+                                        event.permission_id.clone(),
+                                        event.session_id.clone(),
+                                        &event.tool_call,
+                                        event.options.clone(),
+                                    )
+                                });
+                                crate::PermissionRequestView { item: inner }
+                            });
+                            this.rendered_items
+                                .push(RenderedItem::PermissionRequest(permission_view));
+                            cx.notify(); // Trigger re-render immediately
+                            log::info!(
+                                "Rendered permission request, total items: {}",
+                                this.rendered_items.len()
+                            );
+                        });
+                    } else {
+                        log::warn!("Entity dropped, skipping permission request");
+                    }
+                });
+            }
+            log::info!(
+                "Permission background task ended for session: {}",
+                filter_log_inner.as_deref().unwrap_or("all")
+            );
+        })
+        .detach();
+
+        let filter_log_str = filter_log.as_deref().unwrap_or("all sessions");
+        log::info!("Subscribed to permission bus for: {}", filter_log_str);
     }
 
     /// Helper to add an update to the rendered items list
@@ -910,6 +1006,9 @@ impl Render for ConversationPanelAcp {
                     children = children.child(v_flex().pl_6().child(todo_list));
                 }
                 RenderedItem::ToolCall(entity) => {
+                    children = children.child(v_flex().pl_6().child(entity.clone()));
+                }
+                RenderedItem::PermissionRequest(entity) => {
                     children = children.child(v_flex().pl_6().child(entity.clone()));
                 }
                 RenderedItem::InfoUpdate(text) => {

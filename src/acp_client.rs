@@ -22,6 +22,7 @@ use tokio::{
 };
 
 use crate::config::AgentProcessConfig;
+use crate::permission_bus::{PermissionBusContainer, PermissionRequestEvent};
 use crate::session_bus::{SessionUpdateBusContainer, SessionUpdateEvent};
 use agent_client_protocol_schema as schema;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
@@ -36,6 +37,7 @@ impl AgentManager {
         configs: HashMap<String, AgentProcessConfig>,
         permission_store: Arc<PermissionStore>,
         session_bus: SessionUpdateBusContainer,
+        permission_bus: PermissionBusContainer,
     ) -> Result<Arc<Self>> {
         if configs.is_empty() {
             return Err(anyhow!("no agents defined in config"));
@@ -47,6 +49,7 @@ impl AgentManager {
                 cfg,
                 permission_store.clone(),
                 session_bus.clone(),
+                permission_bus.clone(),
             )
             .await
             {
@@ -86,6 +89,7 @@ impl AgentHandle {
         config: AgentProcessConfig,
         permission_store: Arc<PermissionStore>,
         session_bus: SessionUpdateBusContainer,
+        permission_bus: PermissionBusContainer,
     ) -> Result<Self> {
         let (sender, receiver) = mpsc::channel(32);
         let (ready_tx, ready_rx) = oneshot::channel();
@@ -100,6 +104,7 @@ impl AgentHandle {
                     config,
                     permission_store,
                     session_bus,
+                    permission_bus,
                     receiver,
                     ready_tx,
                 ) {
@@ -169,6 +174,7 @@ fn run_agent_worker(
     config: AgentProcessConfig,
     permission_store: Arc<PermissionStore>,
     session_bus: SessionUpdateBusContainer,
+    permission_bus: PermissionBusContainer,
     command_rx: mpsc::Receiver<AgentCommand>,
     ready_tx: oneshot::Sender<Result<()>>,
 ) -> Result<()> {
@@ -185,6 +191,7 @@ fn run_agent_worker(
                 config,
                 permission_store,
                 session_bus,
+                permission_bus,
                 command_rx,
                 ready_tx,
             ))
@@ -197,6 +204,7 @@ async fn agent_event_loop(
     config: AgentProcessConfig,
     permission_store: Arc<PermissionStore>,
     session_bus: SessionUpdateBusContainer,
+    permission_bus: PermissionBusContainer,
     mut command_rx: mpsc::Receiver<AgentCommand>,
     ready_tx: oneshot::Sender<Result<()>>,
 ) -> Result<()> {
@@ -232,7 +240,7 @@ async fn agent_event_loop(
         .ok_or_else(|| anyhow!("agent {agent_name} missing stdout"))?
         .compat();
 
-    let client = GuiClient::new(agent_name.clone(), permission_store, session_bus);
+    let client = GuiClient::new(agent_name.clone(), permission_store, session_bus, permission_bus);
     let (conn, io_task) = acp::ClientSideConnection::new(client, outgoing, incoming, |fut| {
         tokio::task::spawn_local(fut);
     });
@@ -310,6 +318,7 @@ struct GuiClient {
     agent_name: String,
     permission_store: Arc<PermissionStore>,
     session_bus: SessionUpdateBusContainer,
+    permission_bus: PermissionBusContainer,
 }
 
 impl GuiClient {
@@ -317,11 +326,13 @@ impl GuiClient {
         agent_name: String,
         permission_store: Arc<PermissionStore>,
         session_bus: SessionUpdateBusContainer,
+        permission_bus: PermissionBusContainer,
     ) -> Self {
         Self {
             agent_name,
             permission_store,
             session_bus,
+            permission_bus,
         }
     }
 }
@@ -333,10 +344,26 @@ impl acp::Client for GuiClient {
         args: acp::RequestPermissionRequest,
     ) -> acp::Result<acp::RequestPermissionResponse> {
         let (tx, rx) = oneshot::channel();
-        let _id = self
+        let permission_id = self
             .permission_store
             .add(self.agent_name.clone(), args.session_id.to_string(), tx)
             .await;
+
+        // Publish permission request event to the permission bus
+        let event = PermissionRequestEvent {
+            permission_id: permission_id.clone(),
+            session_id: args.session_id.to_string(),
+            agent_name: self.agent_name.clone(),
+            tool_call: args.tool_call,
+            options: args.options,
+        };
+
+        log::info!(
+            "[GuiClient] Publishing permission request {} to permission bus for session '{}'",
+            permission_id,
+            event.session_id
+        );
+        self.permission_bus.publish(event);
 
         rx.await.map_err(|_| {
             acp::Error::internal_error().with_data("permission request channel closed")
@@ -447,6 +474,23 @@ impl PermissionStore {
             },
         );
         id
+    }
+
+    /// Respond to a permission request with the given response
+    pub async fn respond(
+        &self,
+        id: &str,
+        response: acp::RequestPermissionResponse,
+    ) -> anyhow::Result<()> {
+        let pending = self.remove(id).await;
+        if let Some(pending) = pending {
+            pending
+                .responder
+                .send(response)
+                .map_err(|_| anyhow!("Failed to send permission response - receiver dropped"))
+        } else {
+            Err(anyhow!("Permission request ID not found: {}", id))
+        }
     }
 
     async fn remove(&self, id: &str) -> Option<PendingPermission> {

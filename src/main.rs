@@ -12,8 +12,9 @@ fn main() {
     app.run(move |cx| {
         agentx::init(cx);
 
-        // Get session_bus from global AppState
+        // Get session_bus and permission_bus from global AppState
         let session_bus = agentx::AppState::global(cx).session_bus.clone();
+        let permission_bus = agentx::AppState::global(cx).permission_bus.clone();
 
         open_new(cx, |_, _, _| {
             // Load settings and config
@@ -48,6 +49,7 @@ fn main() {
                 config.agent_servers.clone(),
                 permission_store.clone(),
                 session_bus.clone(),
+                permission_bus.clone(),
             )
             .await
             {

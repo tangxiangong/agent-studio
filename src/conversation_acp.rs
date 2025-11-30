@@ -554,15 +554,21 @@ impl ConversationPanelAcp {
             );
         });
 
+        // Clone session_filter for logging inside the closure
+        let filter_log_inner = filter_log.clone();
+
         // Spawn background task to receive from channel and update entity
         cx.spawn(async move |cx| {
+            log::info!("Starting background task for session: {}", filter_log_inner.as_deref().unwrap_or("all"));
             while let Some(update) = rx.recv().await {
+                log::info!("Background task received update for session: {}", filter_log_inner.as_deref().unwrap_or("all"));
                 let weak = weak_entity.clone();
                 let _ = cx.update(|cx| {
                     if let Some(entity) = weak.upgrade() {
                         entity.update(cx, |this, cx| {
                             let index = this.next_index;
                             this.next_index += 1;
+                            log::info!("Processing update type: {:?}", update);
                             Self::add_update_to_list(&mut this.rendered_items, update, index, cx);
                             cx.notify(); // Trigger re-render immediately
                             log::info!(
@@ -570,9 +576,12 @@ impl ConversationPanelAcp {
                                 this.rendered_items.len()
                             );
                         });
+                    } else {
+                        log::warn!("Entity dropped, skipping update");
                     }
                 });
             }
+            log::info!("Background task ended for session: {}", filter_log_inner.as_deref().unwrap_or("all"));
         })
         .detach();
 

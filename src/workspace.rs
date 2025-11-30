@@ -567,6 +567,10 @@ impl DockWorkspace {
                 prompt: vec![task_input.into()],
                 meta: None,
             };
+
+            if let Err(e) = agent_handle.prompt(prompt_req).await {
+                log::error!("Failed to send prompt: {}", e);
+            }
         })
         .detach();
     }

@@ -396,12 +396,15 @@ impl acp::Client for GuiClient {
         &self,
         args: acp::SessionNotification,
     ) -> acp::Result<(), acp::Error> {
+        log::info!("[GuiClient] Received session_notification from agent '{}' for session '{}'", self.agent_name, args.session_id);
+
         // Publish event to the session bus
         let event = SessionUpdateEvent {
             session_id: args.session_id.to_string(),
             update: Arc::new(convert_session_update(&args.update)),
         };
 
+        log::info!("[GuiClient] Publishing SessionUpdateEvent to bus");
         self.session_bus.publish(event);
         Ok(())
     }

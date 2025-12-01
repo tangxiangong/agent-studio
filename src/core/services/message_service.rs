@@ -62,6 +62,32 @@ impl MessageService {
         Ok(session_id)
     }
 
+    /// Send a user message to an existing session
+    ///
+    /// This method performs the following steps:
+    /// 1. Publish the user message to the event bus (immediate UI feedback)
+    /// 2. Send the prompt to the agent
+    ///
+    /// Use this when you already have a session ID and want to ensure
+    /// the UI panel has subscribed before the message is sent.
+    pub async fn send_message_to_session(
+        &self,
+        agent_name: &str,
+        session_id: &str,
+        message: String,
+    ) -> Result<()> {
+        // 1. Publish user message to event bus (immediate UI feedback)
+        self.publish_user_message(session_id, &message);
+
+        // 2. Send prompt to agent
+        self.agent_service
+            .send_prompt(agent_name, session_id, vec![message])
+            .await
+            .map_err(|e| anyhow!("Failed to send message: {}", e))?;
+
+        Ok(())
+    }
+
     /// Publish a user message to the event bus (immediate UI feedback)
     pub fn publish_user_message(&self, session_id: &str, message: &str) {
         let content_block = schema::ContentBlock::from(message.to_string());

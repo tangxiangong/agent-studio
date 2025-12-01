@@ -132,7 +132,7 @@ impl AgentService {
 
     /// Close an agent's session
     pub async fn close_session(&self, agent_name: &str) -> Result<()> {
-        if let Some(mut info) = self.sessions.write().unwrap().get_mut(agent_name) {
+        if let Some(info) = self.sessions.write().unwrap().get_mut(agent_name) {
             info.status = SessionStatus::Closed;
             log::info!(
                 "Closed session {} for agent {}",
@@ -150,7 +150,7 @@ impl AgentService {
 
     /// Update session's last active time
     pub fn update_session_activity(&self, agent_name: &str) {
-        if let Some(mut info) = self.sessions.write().unwrap().get_mut(agent_name) {
+        if let Some(info) = self.sessions.write().unwrap().get_mut(agent_name) {
             info.last_active = Utc::now();
         }
     }

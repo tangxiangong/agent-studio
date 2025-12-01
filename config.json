@@ -1,6 +1,6 @@
 {
   "agent_servers": {
-    "CLaude Code": {
+    "Claude Code": {
       "command": "claude-code-acp",
       "args": [],
       "env": {}

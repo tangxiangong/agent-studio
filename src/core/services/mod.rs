@@ -6,5 +6,5 @@
 mod agent_service;
 mod message_service;
 
-pub use agent_service::{AgentService, AgentSessionInfo, SessionStatus};
+pub use agent_service::AgentService;
 pub use message_service::MessageService;

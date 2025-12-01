@@ -19,7 +19,8 @@
       "Bash(tokei:*)",
       "Bash(tree:*)",
       "Bash(find:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(cargo clippy:*)"
     ],
     "deny": [],
     "ask": []

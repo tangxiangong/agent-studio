@@ -58,6 +58,10 @@ src/
 │   │   ├── session_bus.rs      # Session updates
 │   │   ├── permission_bus.rs   # Permission requests
 │   │   └── mod.rs
+│   ├── services/         # Business logic services (NEW)
+│   │   ├── agent_service.rs    # Agent and session management
+│   │   ├── message_service.rs  # Message sending and subscription
+│   │   └── mod.rs
 │   ├── config.rs         # Configuration types
 │   └── mod.rs
 │
@@ -100,12 +104,32 @@ src/
 
 3. **App Module** (`src/app/`):
    - **actions.rs**: Centralized action definitions with comprehensive documentation (workspace, task list, UI settings, themes, menus)
+   - **app_state.rs**: Global application state, including service layer references
    - **menu.rs**: Application menu setup and handling
    - **themes.rs**: Theme configuration and switching
    - **title_bar.rs**: Custom application title bar component
    - **app_menus.rs**: Menu construction and organization
 
-4. **Conversation UI Components** (`src/components/`):
+4. **Service Layer** (`src/core/services/`) - **NEW as of 2025-12-01**:
+   - **AgentService** (`agent_service.rs`): Manages agents and their sessions using the Aggregate Root pattern
+     - `list_agents()`: List all available agents
+     - `create_session(agent_name)`: Create a new session for an agent
+     - `get_or_create_session(agent_name)`: Get existing or create new session (recommended)
+     - `get_active_session(agent_name)`: Get the active session ID
+     - `send_prompt(agent_name, session_id, prompt)`: Send a prompt to an agent
+     - `close_session(agent_name)`: Close an agent's session
+   - **MessageService** (`message_service.rs`): Handles message sending and event bus interaction
+     - `send_user_message(agent_name, message)`: Complete flow - creates/reuses session, publishes to event bus, sends prompt
+     - `publish_user_message(session_id, message)`: Publish user message to event bus for immediate UI feedback
+     - `subscribe_session_updates(session_id)`: Subscribe to session updates with automatic filtering
+   - **Architecture Benefits**:
+     - Separates business logic from UI components
+     - Eliminates ~150 lines of duplicate code across components
+     - Centralizes session management (one active session per agent)
+     - Simplifies testing (services can be tested independently)
+     - Unified error handling with `anyhow::Result`
+
+5. **Conversation UI Components** (`src/components/`):
    - **AgentMessage** (`agent_message.rs`): Displays AI agent responses with markdown support and streaming capability
    - **UserMessage** (`user_message.rs`): Shows user messages with text and file/resource attachments
    - **ToolCallItem** (`tool_call_item.rs`): Renders tool calls with status badges (pending, running, success, error)
@@ -118,9 +142,13 @@ src/
    - **ConversationPanel** (`conversation.rs`): Mock conversation UI showcasing all message types
    - **ConversationPanelAcp** (`conversation_acp/`): **ACP-enabled conversation panel** with real-time event bus integration
      - Modularized into `panel.rs` (main logic), `types.rs` (reusable helpers), and `mod.rs`
-   - **CodeEditorPanel** (`code_editor.rs`): High-performance code editor with LSP integration and tree-sitter
-   - **ListTaskPanel** (`task_list.rs`): Task list with collapsible sections, loads from `mock_tasks.json`
-   - **ChatInputPanel** (`chat_input.rs`): Chat input panel with agent/mode selectors, publishes to session bus
+     - Uses **MessageService** for simplified subscription with automatic session filtering
+   - **CodeEditorPanel** (`code_editor/`): High-performance code editor with LSP integration and tree-sitter
+     - Modularized into subdirectory with separate modules for LSP providers, storage, and panel logic
+   - **ListTaskPanel** (`task_list/`): Task list with collapsible sections
+     - Modularized into subdirectory with separate types, delegate, and panel logic
+   - **ChatInputPanel** (`chat_input.rs`): Chat input panel with agent/mode selectors
+     - Uses **MessageService** for unified message sending (session creation, event publishing, prompt sending)
    - **WelcomePanel** (`welcome_panel.rs`): Welcome screen for new sessions
 
 6. **Core Infrastructure** (`src/core/`):
@@ -346,6 +374,86 @@ The application uses a centralized action system defined in `src/app/actions.rs`
    - `SwitchThemeMode(ThemeMode)`: Toggle light/dark mode
 
 All actions are fully documented with Chinese and English comments explaining their purpose and parameters.
+
+### Service Layer Usage (NEW - 2025-12-01)
+
+The application now uses a service layer to separate business logic from UI components. Services are accessed through `AppState`:
+
+#### Using MessageService
+
+**Send a message** (automatically creates/reuses session, publishes to event bus, sends prompt):
+```rust
+// In a UI component
+let message_service = AppState::global(cx)
+    .message_service()
+    .expect("MessageService not initialized");
+
+cx.spawn(async move |_this, _cx| {
+    match message_service.send_user_message(&agent_name, message).await {
+        Ok(session_id) => {
+            log::info!("Message sent successfully to session {}", session_id);
+        }
+        Err(e) => {
+            log::error!("Failed to send message: {}", e);
+        }
+    }
+}).detach();
+```
+
+**Send a message to an existing session** (when you need to ensure panel is subscribed first):
+```rust
+// Recommended pattern for creating panels:
+// 1. Get or create session
+let agent_service = AppState::global(cx).agent_service().unwrap();
+let session_id = agent_service.get_or_create_session(&agent_name).await?;
+
+// 2. Create panel (panel subscribes to session)
+let conversation_panel = DockPanelContainer::panel_for_session(session_id.clone(), window, cx);
+
+// 3. Send message to session (panel will receive it)
+let message_service = AppState::global(cx).message_service().unwrap();
+message_service.send_message_to_session(&agent_name, &session_id, message).await?;
+```
+
+**Subscribe to session updates** (automatic filtering):
+```rust
+let message_service = AppState::global(cx).message_service().unwrap();
+
+// Subscribe to a specific session (automatic filtering)
+let mut rx = message_service.subscribe_session_updates(Some(session_id));
+
+// Or subscribe to all sessions
+let mut rx = message_service.subscribe_session_updates(None);
+
+cx.spawn(async move |cx| {
+    while let Some(update) = rx.recv().await {
+        // Handle update (already filtered by session_id if specified)
+        // Process the update...
+    }
+}).detach();
+```
+
+#### Using AgentService
+
+**Get or create a session**:
+```rust
+let agent_service = AppState::global(cx).agent_service().unwrap();
+
+// Recommended: automatically reuses existing active session
+let session_id = agent_service.get_or_create_session(&agent_name).await?;
+
+// Or explicitly create a new session
+let session_id = agent_service.create_session(&agent_name).await?;
+```
+
+**Check for active session**:
+```rust
+if let Some(session_id) = agent_service.get_active_session(&agent_name) {
+    log::info!("Agent {} has active session: {}", agent_name, session_id);
+}
+```
+
+**Service Initialization**: Services are automatically initialized in `AppState::set_agent_manager()` when the AgentManager is ready.
 
 ### Event Bus Architecture (SessionUpdateBus)
 

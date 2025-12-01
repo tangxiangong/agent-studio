@@ -1,4 +1,3 @@
-use agent_client_protocol as acp;
 use gpui::*;
 use gpui_component::dock::{DockItem, DockPlacement};
 use std::sync::Arc;
@@ -164,6 +163,7 @@ impl DockWorkspace {
     }
 
     /// Handle CreateTaskFromWelcome action - create a new agent task from welcome panel
+    /// Uses MessageService to handle session creation, event publishing, and prompt sending
     pub(super) fn on_action_create_task_from_welcome(
         &mut self,
         action: &CreateTaskFromWelcome,
@@ -181,97 +181,63 @@ impl DockWorkspace {
             task_input
         );
 
-        // Check if we have an existing welcome session
-        let existing_session = AppState::global(cx).welcome_session().cloned();
+        // Check for existing welcome session (created by WelcomePanel)
+        let welcome_session = AppState::global(cx).welcome_session().cloned();
+
+        // Get services
+        let agent_service = match AppState::global(cx).agent_service() {
+            Some(service) => service.clone(),
+            None => {
+                log::error!("AgentService not initialized");
+                return;
+            }
+        };
+
+        let message_service = match AppState::global(cx).message_service() {
+            Some(service) => service.clone(),
+            None => {
+                log::error!("MessageService not initialized");
+                return;
+            }
+        };
 
         let dock_area = self.dock_area.clone();
 
         cx.spawn_in(window, async move |_this, window| {
-            // Determine session_id: use existing or create new
-            let (session_id_str, session_id_obj, agent_handle) =
-                if let Some(session) = existing_session {
-                    log::info!("Using existing welcome session: {}", session.session_id);
+            // Step 1: Get or reuse session
+            // IMPORTANT: Reuse welcome_session if it exists (created by WelcomePanel)
+            // This ensures we use the same agent process that's already running
+            let session_id = if let Some(ws) = welcome_session {
+                log::info!(
+                    "Reusing welcome session {} for agent {}",
+                    ws.session_id,
+                    ws.agent_name
+                );
+                ws.session_id
+            } else {
+                // No welcome session, create new one
+                match agent_service.get_or_create_session(&agent_name).await {
+                    Ok(session_id) => {
+                        log::info!("Created new session {} for agent {}", session_id, agent_name);
+                        session_id
+                    }
+                    Err(e) => {
+                        log::error!("Failed to get/create session: {}", e);
+                        return;
+                    }
+                }
+            };
 
-                    // Get agent handle from session's agent_name
-                    let agent_handle = window
-                        .update(|_, cx| {
-                            AppState::global(cx)
-                                .agent_manager()
-                                .and_then(|m| m.get(&session.agent_name))
-                        })
-                        .ok()
-                        .flatten();
-
-                    let agent_handle = match agent_handle {
-                        Some(handle) => handle,
-                        None => {
-                            log::error!(
-                                "Agent not found for existing session: {}",
-                                session.agent_name
-                            );
-                            return;
-                        }
-                    };
-
-                    // Clone session_id to avoid lifetime issues
-                    let session_id_str = session.session_id.clone();
-                    let session_id_obj = acp::SessionId::from(session_id_str.clone());
-
-                    (session_id_str, session_id_obj, agent_handle)
-                } else {
-                    // Fallback: create new session (for compatibility)
-                    log::info!("No existing welcome session, creating new session...");
-
-                    let agent_handle = window
-                        .update(|_, cx| {
-                            AppState::global(cx)
-                                .agent_manager()
-                                .and_then(|m| m.get(&agent_name))
-                        })
-                        .ok()
-                        .flatten();
-
-                    let agent_handle = match agent_handle {
-                        Some(handle) => handle,
-                        None => {
-                            log::error!("Agent not found: {}", agent_name);
-                            return;
-                        }
-                    };
-
-                    let new_session_req = acp::NewSessionRequest {
-                        cwd: std::env::current_dir().unwrap_or_default(),
-                        mcp_servers: vec![],
-                        meta: None,
-                    };
-
-                    let session_id_obj = match agent_handle.new_session(new_session_req).await {
-                        Ok(resp) => resp.session_id,
-                        Err(e) => {
-                            log::error!("Failed to create session: {}", e);
-                            return;
-                        }
-                    };
-
-                    let session_id_str = session_id_obj.to_string();
-                    log::info!("New session created: {}", session_id_str);
-
-                    (session_id_str, session_id_obj, agent_handle)
-                };
-
-            // Clear the welcome session from AppState
-            _ = window.update(|_, cx| {
-                AppState::global_mut(cx).clear_welcome_session();
-            });
-
-            // 2. Update UI (Create Panel AND Publish Event)
-            let session_id_str_clone = session_id_str.clone();
-            let task_input_clone = task_input.clone();
-
+            // Step 2: Clear welcome session and create ConversationPanel
+            // Panel will subscribe to session updates BEFORE we send the message
+            let session_id_for_send = session_id.clone();
             _ = window.update(move |window, cx| {
-                // A. Create Panel (Subscribes to bus immediately)
+                // Clear welcome session
+                AppState::global_mut(cx).clear_welcome_session();
+
+                // Create panel - this subscribes to the session
                 let conversation_panel =
-                    DockPanelContainer::panel_for_session(session_id_str_clone.clone(), window, cx);
+                    DockPanelContainer::panel_for_session(session_id, window, cx);
 
                 let conversation_item =
                     DockItem::tab(conversation_panel, &dock_area.downgrade(), window, cx);
@@ -279,7 +245,7 @@ impl DockWorkspace {
                 dock_area.update(cx, |dock_area, cx| {
                     dock_area.set_center(conversation_item, window, cx);
 
-                    // Collapse others
+                    // Collapse right and bottom docks
                     if dock_area.is_dock_open(DockPlacement::Right, cx) {
                         dock_area.toggle_dock(DockPlacement::Right, window, cx);
                     }
@@ -287,29 +253,22 @@ impl DockWorkspace {
                         dock_area.toggle_dock(DockPlacement::Bottom, window, cx);
                     }
                 });
-
-                // B. Publish User Message Event (Panel is now listening)
-                use agent_client_protocol_schema as schema;
-                let content_block = schema::ContentBlock::from(task_input_clone);
-                let content_chunk = schema::ContentChunk::new(content_block);
-
-                let user_event = crate::core::event_bus::session_bus::SessionUpdateEvent {
-                    session_id: session_id_str_clone,
-                    update: Arc::new(schema::SessionUpdate::UserMessageChunk(content_chunk)),
-                };
-
-                AppState::global(cx).session_bus.publish(user_event);
             });
 
-            // 3. Send Prompt
-            let prompt_req = acp::PromptRequest {
-                session_id: session_id_obj,
-                prompt: vec![task_input.into()],
-                meta: None,
-            };
-
-            if let Err(e) = agent_handle.prompt(prompt_req).await {
-                log::error!("Failed to send prompt: {}", e);
+            // Step 3: Now send the message - panel is subscribed and will receive it
+            match message_service
+                .send_message_to_session(&agent_name, &session_id_for_send, task_input)
+                .await
+            {
+                Ok(_) => {
+                    log::info!(
+                        "Message sent successfully to session {}",
+                        session_id_for_send
+                    );
+                }
+                Err(e) => {
+                    log::error!("Failed to send message: {}", e);
+                }
             }
         })
         .detach();

@@ -519,51 +519,43 @@ impl ConversationPanelAcp {
     }
 
     /// Subscribe to session updates after the entity is created
+    /// Uses MessageService for simplified subscription with automatic filtering
     pub fn subscribe_to_updates(
         entity: &Entity<Self>,
         session_filter: Option<String>,
         cx: &mut App,
     ) {
         let weak_entity = entity.downgrade();
-        let session_bus = AppState::global(cx).session_bus.clone();
 
-        // Create unbounded channel for cross-thread communication
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<SessionUpdate>();
-
-        // Clone session_filter for logging after the closure
-        let filter_log = session_filter.clone();
-
-        // Subscribe to session bus, send updates to channel in callback
-        session_bus.subscribe(move |event| {
-            // Filter by session_id if specified
-            if let Some(ref filter_id) = session_filter {
-                if &event.session_id != filter_id {
-                    return; // Skip this update
-                }
+        // Get MessageService for subscription
+        let message_service = match AppState::global(cx).message_service() {
+            Some(service) => service.clone(),
+            None => {
+                log::error!("MessageService not initialized, cannot subscribe to updates");
+                return;
             }
+        };
 
-            // This callback runs in agent I/O thread
-            let _ = tx.send((*event.update).clone());
-            log::info!(
-                "Session update sent to channel: session_id={}",
-                event.session_id
-            );
-        });
+        // Clone session_filter for logging before and after the async closure
+        let session_filter_log = session_filter.clone();
+        let session_filter_log_end = session_filter.clone();
 
-        // Clone session_filter for logging inside the closure
-        let filter_log_inner = filter_log.clone();
+        // Use MessageService to subscribe with automatic filtering
+        let mut rx = message_service.subscribe_session_updates(session_filter);
 
-        // Spawn background task to receive from channel and update entity
+        // Spawn background task to receive updates and update entity
         cx.spawn(async move |cx| {
             log::info!(
                 "Starting background task for session: {}",
-                filter_log_inner.as_deref().unwrap_or("all")
+                session_filter_log.as_deref().unwrap_or("all")
             );
+
             while let Some(update) = rx.recv().await {
                 log::info!(
                     "Background task received update for session: {}",
-                    filter_log_inner.as_deref().unwrap_or("all")
+                    session_filter_log.as_deref().unwrap_or("all")
                 );
+
                 let weak = weak_entity.clone();
                 let _ = cx.update(|cx| {
                     if let Some(entity) = weak.upgrade() {
@@ -576,7 +568,6 @@ impl ConversationPanelAcp {
                             cx.notify(); // Trigger re-render immediately
 
                             // Scroll to bottom after render completes
-                            // Use a very large offset to ensure we reach the bottom
                             let scroll_handle = this.scroll_handle.clone();
                             cx.defer(move |_| {
                                 // Set to a very large Y offset to ensure scrolling to bottom
@@ -594,15 +585,18 @@ impl ConversationPanelAcp {
                     }
                 });
             }
+
             log::info!(
                 "Background task ended for session: {}",
-                filter_log_inner.as_deref().unwrap_or("all")
+                session_filter_log.as_deref().unwrap_or("all")
             );
         })
         .detach();
 
-        let filter_log_str = filter_log.as_deref().unwrap_or("all sessions");
-        log::info!("Subscribed to session bus for: {}", filter_log_str);
+        log::info!(
+            "Subscribed to session updates via MessageService for: {}",
+            session_filter_log_end.as_deref().unwrap_or("all sessions")
+        );
     }
 
     /// Subscribe to permission requests after the entity is created

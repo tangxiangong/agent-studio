@@ -55,7 +55,7 @@ pub struct CodeEditorPanel {
     _lint_task: Task<()>,
 }
 
-impl crate::dock_panel::DockPanel for CodeEditorPanel {
+impl crate::panels::dock_panel::DockPanel for CodeEditorPanel {
     fn title() -> &'static str {
         "CodeEditor"
     }
@@ -84,7 +84,7 @@ pub struct CodeEditorPanelLspStore {
 impl CodeEditorPanelLspStore {
     pub fn new() -> Self {
         let completions = serde_json::from_slice::<Vec<CompletionItem>>(include_bytes!(
-            "./fixtures/completion_items.json"
+            "../fixtures/completion_items.json"
         ))
         .unwrap();
 
@@ -662,7 +662,7 @@ impl CodeEditorPanel {
                     hard_tabs: false,
                 })
                 .soft_wrap(false)
-                .default_value(include_str!("./fixtures/test.rs"))
+                .default_value(include_str!("../fixtures/test.rs"))
                 .placeholder("Enter your code here...");
 
             let lsp_store = Rc::new(lsp_store.clone());

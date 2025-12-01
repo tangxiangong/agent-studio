@@ -4,7 +4,7 @@ use gpui_component::dock::{DockItem, DockPlacement};
 use std::sync::Arc;
 
 use crate::{
-    dock_panel::DockPanelContainer, utils, AddPanel, AppState, ConversationPanelAcp,
+    panels::dock_panel::DockPanelContainer, utils, AddPanel, AppState, ConversationPanelAcp,
     CreateTaskFromWelcome, NewSessionConversationPanel, ShowConversationPanel, ShowWelcomePanel,
     ToggleDockToggleButton, TogglePanelVisible, WelcomePanel,
 };
@@ -293,7 +293,7 @@ impl DockWorkspace {
                 let content_block = schema::ContentBlock::from(task_input_clone);
                 let content_chunk = schema::ContentChunk::new(content_block);
 
-                let user_event = crate::session_bus::SessionUpdateEvent {
+                let user_event = crate::core::event_bus::session_bus::SessionUpdateEvent {
                     session_id: session_id_str_clone,
                     update: Arc::new(schema::SessionUpdate::UserMessageChunk(content_chunk)),
                 };

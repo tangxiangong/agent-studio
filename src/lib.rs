@@ -1,27 +1,31 @@
-pub mod acp_client;
 mod app;
-mod chat_input;
-mod code_editor;
 mod components;
-mod config;
-mod conversation;
-mod conversation_acp;
-pub mod dock_panel;
-mod permission_bus;
+mod core;
+mod panels;
 mod schemas;
-mod session_bus;
-mod settings_window;
 mod task_data;
-mod task_list;
 mod task_turn_view;
 mod utils;
-mod welcome_panel;
 pub mod workspace;
 
 #[cfg(test)]
 mod test_mock_data;
 
-use crate::dock_panel::{DockPanel, DockPanelContainer, DockPanelState};
+// Re-export from panels module
+use crate::panels::{DockPanel, DockPanelContainer, DockPanelState};
+pub use panels::{
+    ChatInputPanel, CodeEditorPanel, ConversationPanel, ConversationPanelAcp, ListTaskPanel,
+    SettingsWindow, WelcomePanel,
+};
+
+// Re-export from core module
+pub use core::{
+    agent::{AgentHandle, AgentManager, PermissionStore},
+    config::{AgentProcessConfig, Config, Settings},
+    event_bus::{PermissionBusContainer, PermissionRequestEvent, SessionUpdateBusContainer, SessionUpdateEvent},
+};
+
+// Re-export from app module
 pub use app::app_state::{AppState, WelcomeSession};
 pub use app::{
     actions::{
@@ -33,23 +37,16 @@ pub use app::{
     },
     app_menus, menu, themes, title_bar,
 };
-pub use chat_input::ChatInputPanel;
-pub use code_editor::CodeEditorPanel;
-pub use config::{AgentProcessConfig, Config, Settings};
-pub use conversation::ConversationPanel;
-pub use conversation_acp::ConversationPanelAcp;
 use gpui::{
     div, px, size, Action, AnyView, App, AppContext, Bounds, Context, Entity, IntoElement,
     KeyBinding, ParentElement, Pixels, Render, SharedString, Size, Styled, Window, WindowBounds,
     WindowKind, WindowOptions,
 };
+// Re-export from other modules
 pub use menu::UIMenu;
 pub use schemas::{conversation_schema, task_schema};
-pub use settings_window::SettingsWindow;
-pub use task_list::ListTaskPanel;
 pub use task_turn_view::CollapsibleEventTurn;
 pub use title_bar::AppTitleBar;
-pub use welcome_panel::WelcomePanel;
 
 // Export components
 pub use components::{
@@ -188,7 +185,7 @@ pub fn init(cx: &mut App) {
     gpui_component::init(cx);
     AppState::init(cx);
     themes::init(cx);
-    code_editor::init();
+    panels::code_editor::init();
     menu::init(cx);
 
     cx.bind_keys([

@@ -17,8 +17,10 @@ use agent_client_protocol_schema::{
 };
 
 use crate::{
-    acp_client::AgentHandle, dock_panel::DockPanel, AgentMessage, AgentMessageData, AgentTodoList,
-    AppState, ChatInputBox, PermissionRequestView, UserMessageData,
+    core::agent::AgentHandle,
+    panels::dock_panel::DockPanel,
+    AgentMessage, AgentMessageData, AgentTodoList, AppState, ChatInputBox,
+    PermissionRequestView, UserMessageData,
 };
 
 // ============================================================================
@@ -713,7 +715,7 @@ impl ConversationPanelAcp {
 
         // Create unbounded channel for cross-thread communication
         let (tx, mut rx) =
-            tokio::sync::mpsc::unbounded_channel::<crate::permission_bus::PermissionRequestEvent>();
+            tokio::sync::mpsc::unbounded_channel::<crate::core::event_bus::permission_bus::PermissionRequestEvent>();
 
         // Clone session_filter for logging after the closure
         let filter_log = session_filter.clone();
@@ -984,7 +986,7 @@ impl ConversationPanelAcp {
 
     /// Load mock session updates from JSON file
     fn load_mock_data() -> Vec<SessionUpdate> {
-        let json_str = include_str!("../mock_conversation_acp.json");
+        let json_str = include_str!("../../mock_conversation_acp.json");
         match serde_json::from_str::<Vec<SessionUpdate>>(json_str) {
             Ok(updates) => {
                 log::info!(
@@ -1101,7 +1103,7 @@ impl ConversationPanelAcp {
             let content_block = schema::ContentBlock::from(text.clone());
             let content_chunk = schema::ContentChunk::new(content_block);
 
-            let user_event = crate::session_bus::SessionUpdateEvent {
+            let user_event = crate::core::event_bus::session_bus::SessionUpdateEvent {
                 session_id: session_id.clone(),
                 update: Arc::new(schema::SessionUpdate::UserMessageChunk(content_chunk)),
             };

@@ -1,6 +1,6 @@
 use crate::app::actions::{Copy, Cut, Info, Paste, SearchAll, ToggleCheck};
-use crate::dock_panel::section;
-use crate::dock_panel::DockPanel;
+use crate::panels::dock_panel::section;
+use crate::panels::dock_panel::DockPanel;
 use gpui::{
     div, px, App, AppContext, Context, Corner, Entity, InteractiveElement, IntoElement, KeyBinding,
     ParentElement as _, Render, SharedString, Styled as _, Window,

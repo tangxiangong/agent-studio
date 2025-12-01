@@ -21,9 +21,11 @@ use tokio::{
     task::LocalSet,
 };
 
-use crate::config::AgentProcessConfig;
-use crate::permission_bus::{PermissionBusContainer, PermissionRequestEvent};
-use crate::session_bus::{SessionUpdateBusContainer, SessionUpdateEvent};
+use crate::core::config::AgentProcessConfig;
+use crate::core::event_bus::{
+    permission_bus::{PermissionBusContainer, PermissionRequestEvent},
+    session_bus::{SessionUpdateBusContainer, SessionUpdateEvent},
+};
 use agent_client_protocol_schema as schema;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 

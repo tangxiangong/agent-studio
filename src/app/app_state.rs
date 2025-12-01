@@ -3,9 +3,8 @@ use std::sync::Arc;
 use gpui::{App, AppContext, Entity, Global, SharedString};
 
 use crate::{
-    acp_client::{AgentManager, PermissionStore},
-    permission_bus::PermissionBusContainer,
-    session_bus::SessionUpdateBusContainer,
+    core::agent::{AgentManager, PermissionStore},
+    core::event_bus::{PermissionBusContainer, SessionUpdateBusContainer},
 };
 
 /// Welcome session info - stores the session created when user selects an agent

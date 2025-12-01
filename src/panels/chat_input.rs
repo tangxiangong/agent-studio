@@ -1,17 +1,19 @@
+use std::collections::HashMap;
+
 use gpui::{
     px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, Styled, Subscription, Window,
+    Pixels, Render, Styled, Subscription, Window,
 };
 
 use gpui_component::{
     input::InputState,
     list::{ListDelegate, ListItem, ListState},
-    select::{SelectEvent, SelectState},
-    v_flex, ActiveTheme, IndexPath, StyledExt,
+    select::SelectState,
+    v_flex, ActiveTheme, IndexPath,
 };
 
-use crate::{components::ChatInputBox, AppState, CreateTaskFromWelcome, WelcomeSession};
-use agent_client_protocol as acp;
+use crate::components::ChatInputBox;
+use crate::AppState;
 
 /// Delegate for the context list in the chat input popover
 struct ContextListDelegate {
@@ -90,9 +92,7 @@ impl ListDelegate for ContextListDelegate {
     }
 }
 
-/// Welcome panel displayed when creating a new task.
-/// Shows a centered input form with title, instructions, and send button.
-pub struct WelcomePanel {
+pub struct ChatInputPanel {
     focus_handle: FocusHandle,
     input_state: Entity<InputState>,
     context_list: Entity<ListState<ContextListDelegate>>,
@@ -100,28 +100,29 @@ pub struct WelcomePanel {
     mode_select: Entity<SelectState<Vec<&'static str>>>,
     agent_select: Entity<SelectState<Vec<String>>>,
     has_agents: bool,
+    /// Map of agent name -> session ID
+    sessions: HashMap<String, String>,
     _subscriptions: Vec<Subscription>,
 }
 
-impl crate::dock_panel::DockPanel for WelcomePanel {
+impl crate::panels::dock_panel::DockPanel for ChatInputPanel {
     fn title() -> &'static str {
-        "Welcome"
+        "Chat Input"
     }
 
     fn description() -> &'static str {
-        "Welcome panel for creating new tasks"
+        "A chat input box for sending messages."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
-
-    fn paddings() -> gpui::Pixels {
+    fn paddings() -> Pixels {
         px(0.)
     }
 }
 
-impl WelcomePanel {
+impl ChatInputPanel {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let entity = cx.new(|cx| Self::new(window, cx));
 
@@ -136,27 +137,17 @@ impl WelcomePanel {
                 },
             );
             this._subscriptions.push(subscription);
-
-            // Subscribe to agent_select selection changes to create session
-            let agent_select_sub = cx.subscribe_in(
-                &this.agent_select,
-                window,
-                |this, _, _: &SelectEvent<Vec<String>>, window, cx| {
-                    this.on_agent_selected(window, cx);
-                },
-            );
-            this._subscriptions.push(agent_select_sub);
         });
 
         entity
     }
 
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut App) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(2, 8) // Auto-grow from 2 to 8 rows
                 .soft_wrap(true) // Enable word wrapping
-                .placeholder("Describe what you'd like to build...")
+                .placeholder("Ask, search, or make anything...")
         });
 
         let context_list =
@@ -203,6 +194,7 @@ impl WelcomePanel {
             mode_select,
             agent_select,
             has_agents,
+            sessions: HashMap::new(),
             _subscriptions: Vec::new(),
         }
     }
@@ -231,161 +223,155 @@ impl WelcomePanel {
         cx.notify();
     }
 
-    /// Called when agent is selected - creates a new session
-    fn on_agent_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // Skip if no agents available
-        if !self.has_agents {
-            return;
-        }
+    /// Send message to the selected agent
+    fn send_message(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Get the selected agent name
+        let agent_name = self.agent_select.read(cx).selected_value().cloned();
 
-        let agent_name = self
-            .agent_select
-            .read(cx)
-            .selected_value()
-            .cloned()
-            .unwrap_or_else(|| "test-agent".to_string());
-
-        // Skip placeholder
-        if agent_name == "No agents" {
-            return;
-        }
-
-        // Get agent handle
-        let agent_handle = match AppState::global(cx)
-            .agent_manager()
-            .and_then(|m| m.get(&agent_name))
-        {
-            Some(handle) => handle,
-            None => {
-                log::warn!("Agent not found: {}", agent_name);
+        let agent_name = match agent_name {
+            Some(name) if name != "No agents" => name,
+            _ => {
+                eprintln!("No agent selected");
                 return;
             }
         };
 
-        log::info!("Agent selected: {}, creating session...", agent_name);
+        // Get the input text
+        let input_text = self.input_state.read(cx).value().to_string();
+        if input_text.trim().is_empty() {
+            log::info!("[ChatInputPanel] Skipping send: input is empty.");
+            return;
+        }
+        log::info!("[ChatInputPanel] Sending message: \"{}\"", input_text);
 
-        // Create session asynchronously
-        cx.spawn_in(window, async move |_this, window| {
-            let new_session_req = acp::NewSessionRequest {
-                cwd: std::env::current_dir().unwrap_or_default(),
-                mcp_servers: vec![],
+        // Get the agent handle
+        let agent_handle = AppState::global(cx)
+            .agent_manager()
+            .and_then(|m| m.get(&agent_name));
+
+        let agent_handle = match agent_handle {
+            Some(handle) => handle,
+            None => {
+                eprintln!("Agent not found: {}", agent_name);
+                return;
+            }
+        };
+
+        // Check if we have an existing session for this agent
+        let existing_session = self.sessions.get(&agent_name).cloned();
+
+        // Clear the input immediately
+        self.input_state.update(cx, |state, cx| {
+            state.set_value("", window, cx);
+        });
+
+        // Spawn async task to send the message
+        let sessions_update = cx.entity().downgrade();
+        cx.spawn(async move |_this, cx| {
+            use agent_client_protocol as acp;
+
+            // Create a new session if needed
+            let session_id = if let Some(sid) = existing_session {
+                sid
+            } else {
+                let request = acp::NewSessionRequest {
+                    cwd: std::env::current_dir().unwrap_or_default(),
+                    mcp_servers: vec![],
+                    meta: None,
+                };
+
+                match agent_handle.new_session(request).await {
+                    Ok(resp) => {
+                        let sid = resp.session_id.to_string();
+                        println!("[{}] Created new session: {}", agent_name, sid);
+
+                        // Store the session ID
+                        let agent_name_clone = agent_name.clone();
+                        let sid_clone = sid.clone();
+                        cx.update(|cx| {
+                            if let Some(entity) = sessions_update.upgrade() {
+                                entity.update(cx, |this, _| {
+                                    this.sessions.insert(agent_name_clone, sid_clone);
+                                });
+                            }
+                        })
+                        .ok();
+
+                        sid
+                    }
+                    Err(e) => {
+                        eprintln!("[{}] Failed to create session: {}", agent_name, e);
+                        return;
+                    }
+                }
+            };
+
+            // Immediately publish user message to session bus for instant UI feedback
+            use agent_client_protocol_schema as schema;
+            use std::sync::Arc;
+
+            // Create user message chunk using the correct ContentChunk API
+            let content_block = schema::ContentBlock::from(input_text.clone());
+            let content_chunk = schema::ContentChunk::new(content_block);
+
+            let user_event = crate::core::event_bus::session_bus::SessionUpdateEvent {
+                session_id: session_id.clone(),
+                update: Arc::new(schema::SessionUpdate::UserMessageChunk(content_chunk)),
+            };
+
+            // Publish to session bus
+            cx.update(|cx| {
+                AppState::global(cx).session_bus.publish(user_event);
+            })
+            .ok();
+            log::info!("Published user message to session bus: {}", session_id);
+
+            // Send the prompt
+            let request = acp::PromptRequest {
+                session_id: acp::SessionId::from(session_id),
+                prompt: vec![input_text.into()],
                 meta: None,
             };
 
-            match agent_handle.new_session(new_session_req).await {
-                Ok(resp) => {
-                    let session_id = resp.session_id.to_string();
-                    log::info!("Session created: {} for agent: {}", session_id, agent_name);
-
-                    // Store session in AppState
-                    _ = window.update(move |_, cx| {
-                        AppState::global_mut(cx).set_welcome_session(WelcomeSession {
-                            session_id,
-                            agent_name,
-                        });
-                    });
+            match agent_handle.prompt(request).await {
+                Ok(_) => {
+                    println!("[{}] Prompt sent successfully", agent_name);
                 }
                 Err(e) => {
-                    log::error!("Failed to create session for agent {}: {}", agent_name, e);
+                    eprintln!("[{}] Failed to send prompt: {}", agent_name, e);
                 }
             }
         })
         .detach();
     }
-
-    /// Handles sending the task based on the current input, mode, and agent selections.
-    fn handle_send_task(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let task_name = self.input_state.read(cx).text().to_string();
-
-        if !task_name.is_empty() {
-            let mode = self
-                .mode_select
-                .read(cx)
-                .selected_value()
-                .cloned()
-                .unwrap_or("Auto")
-                .to_string();
-
-            let agent_name = self
-                .agent_select
-                .read(cx)
-                .selected_value()
-                .cloned()
-                .unwrap_or_else(|| "test-agent".to_string());
-
-            let agent_name = if agent_name == "No agents" {
-                "test-agent".to_string()
-            } else {
-                agent_name
-            };
-
-            // Dispatch CreateTaskFromWelcome action
-            let action = CreateTaskFromWelcome {
-                task_input: task_name.clone(),
-                agent_name,
-                mode,
-            };
-
-            window.dispatch_action(Box::new(action), cx);
-        }
-    }
 }
 
-impl Focusable for WelcomePanel {
-    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+impl Focusable for ChatInputPanel {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for WelcomePanel {
+impl Render for ChatInputPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
-            .items_center()
-            .justify_center()
+            .justify_end()
             .bg(cx.theme().background)
             .child(
-                v_flex()
-                    .w_full()
-                    .max_w(px(800.)) // Maximum width for better readability
-                    .gap_4()
-                    .child(
-                        // Welcome title and subtitle
-                        v_flex()
-                            .w_full()
-                            .items_center()
-                            .gap_2()
-                            .px(px(32.))
-                            .child(
-                                gpui::div()
-                                    .text_2xl()
-                                    .font_semibold()
-                                    .text_color(cx.theme().foreground)
-                                    .child("Welcome to Agent Studio"),
-                            )
-                            .child(
-                                gpui::div()
-                                    .text_base()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("Start by describing what you'd like to build"),
-                            ),
-                    )
-                    .child(
-                        // Chat input with title and send handler
-                        ChatInputBox::new("welcome-chat-input", self.input_state.clone())
-                            // .title("New Task")
-                            .context_list(self.context_list.clone(), cx)
-                            .context_popover_open(self.context_popover_open)
-                            .on_context_popover_change(cx.listener(|this, open: &bool, _, cx| {
-                                this.context_popover_open = *open;
-                                cx.notify();
-                            }))
-                            .mode_select(self.mode_select.clone())
-                            .agent_select(self.agent_select.clone())
-                            .on_send(cx.listener(|this, _, window, cx| {
-                                this.handle_send_task(window, cx);
-                            })),
-                    ),
+                ChatInputBox::new("chat-input-box", self.input_state.clone())
+                    // .title("Send a message")
+                    .context_list(self.context_list.clone(), cx)
+                    .context_popover_open(self.context_popover_open)
+                    .on_context_popover_change(cx.listener(|this, open: &bool, _, cx| {
+                        this.context_popover_open = *open;
+                        cx.notify();
+                    }))
+                    .on_send(cx.listener(|this, _, window, cx| {
+                        this.send_message(window, cx);
+                    }))
+                    .mode_select(self.mode_select.clone())
+                    .agent_select(self.agent_select.clone()),
             )
     }
 }

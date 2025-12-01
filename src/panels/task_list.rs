@@ -351,7 +351,7 @@ pub struct ListTaskPanel {
     _subscriptions: Vec<Subscription>,
 }
 
-impl crate::dock_panel::DockPanel for ListTaskPanel {
+impl crate::panels::dock_panel::DockPanel for ListTaskPanel {
     fn title() -> &'static str {
         "Tasks"
     }

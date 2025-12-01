@@ -9,7 +9,7 @@ use gpui_component::{
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    dock_panel::DockPanelContainer, AddPanel, AppState, AppTitleBar, ChatInputPanel,
+    panels::dock_panel::DockPanelContainer, AddPanel, AppState, AppTitleBar, ChatInputPanel,
     CodeEditorPanel, ConversationPanelAcp, ListTaskPanel, ToggleDockToggleButton,
     TogglePanelVisible, WelcomePanel,
 };

@@ -483,7 +483,7 @@ pub struct ConversationPanel {
     rendered_items: Vec<RenderedItem>,
 }
 
-impl crate::dock_panel::DockPanel for ConversationPanel {
+impl crate::panels::dock_panel::DockPanel for ConversationPanel {
     fn title() -> &'static str {
         "Conversation"
     }
@@ -509,7 +509,7 @@ impl ConversationPanel {
     fn new(_: &mut Window, cx: &mut App) -> Self {
         tracing::info!("🚀 Initializing ConversationPanel");
 
-        let json_content = include_str!("fixtures/mock_conversation.json");
+        let json_content = include_str!("../fixtures/mock_conversation.json");
         let items: Vec<ConversationItem> =
             serde_json::from_str(json_content).expect("Failed to parse mock conversation");
 

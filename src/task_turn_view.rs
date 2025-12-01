@@ -13,7 +13,7 @@ use gpui_component::{
 };
 use gpui_component::{h_flex, ActiveTheme, IconName, StyledExt};
 
-use crate::dock_panel::section;
+use crate::panels::dock_panel::section;
 
 pub struct CollapsibleEventTurn {
     focus_handle: FocusHandle,
@@ -21,7 +21,7 @@ pub struct CollapsibleEventTurn {
     item2_open: bool,
 }
 
-impl crate::dock_panel::DockPanel for CollapsibleEventTurn {
+impl crate::panels::dock_panel::DockPanel for CollapsibleEventTurn {
     fn title() -> &'static str {
         "Collapsible"
     }

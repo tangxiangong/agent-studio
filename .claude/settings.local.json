@@ -15,7 +15,10 @@
       "Bash(RUST_LOG=info cargo build:*)",
       "Bash(cargo test:*)",
       "Bash(cargo doc:*)",
-      "Bash(timeout 8 cargo run:*)"
+      "Bash(timeout 8 cargo run:*)",
+      "Bash(tokei:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

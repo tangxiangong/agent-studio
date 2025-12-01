@@ -1,6 +1,4 @@
-use agentx::acp_client::{AgentManager, PermissionStore};
-use agentx::workspace::open_new;
-use agentx::{Config, Settings};
+use agentx::{workspace::open_new, AgentManager, Config, PermissionStore, Settings};
 use anyhow::Context as _;
 use gpui::Application;
 use gpui_component_assets::Assets;

@@ -425,7 +425,6 @@ impl TaskPanel {
         let workspace_id_for_toggle = workspace_id.clone();
         let is_expanded = workspace.is_expanded;
         let has_tasks = !workspace.tasks.is_empty();
-        let can_expand = has_tasks || is_expanded;
         let workspace_name = workspace.name.clone();
         let task_count = workspace.tasks.len();
 
@@ -442,28 +441,22 @@ impl TaskPanel {
                     .cursor_pointer()
                     .hover(|s| s.bg(theme.accent.opacity(0.3)))
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        if can_expand {
-                            this.toggle_workspace(workspace_id_for_toggle.clone(), cx);
-                        }
+                        this.toggle_workspace(workspace_id_for_toggle.clone(), cx);
                     }))
                     .child(
                         h_flex()
                             .gap_1p5()
                             .items_center()
-                            .child(if can_expand {
-                                if is_expanded {
-                                    Icon::new(IconName::ChevronDown)
-                                        .size_4()
-                                        .text_color(theme.muted_foreground)
-                                        .into_any_element()
-                                } else {
-                                    Icon::new(IconName::ChevronRight)
-                                        .size_4()
-                                        .text_color(theme.muted_foreground)
-                                        .into_any_element()
-                                }
+                            .child(if is_expanded {
+                                Icon::new(IconName::ChevronDown)
+                                    .size_4()
+                                    .text_color(theme.muted_foreground)
+                                    .into_any_element()
                             } else {
-                                div().w_4().into_any_element()
+                                Icon::new(IconName::ChevronRight)
+                                    .size_4()
+                                    .text_color(theme.muted_foreground)
+                                    .into_any_element()
                             })
                             .child(
                                 div()

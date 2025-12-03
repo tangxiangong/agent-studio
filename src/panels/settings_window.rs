@@ -25,7 +25,7 @@ impl SettingsWindow {
         }
     }
 
-    pub fn open(cx: &mut App) -> Task<anyhow::Result<WindowHandle<Root>>> {
+    pub fn open(_window: &mut Window, cx: &mut App) -> Task<anyhow::Result<WindowHandle<Root>>> {
         let window_size = size(px(800.0), px(600.0));
         let window_bounds = Bounds::centered(None, window_size, cx);
 

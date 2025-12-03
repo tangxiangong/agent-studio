@@ -148,10 +148,33 @@ actions!(
         Tab,                   // 切换到下一个标签页
         TabPrev,               // 切换到上一个标签页
         ShowPanelInfo,         // 显示面板信息
-        ShowWelcomePanel,      // 显示欢迎面板
-        ShowConversationPanel  // 显示对话面板
+        ShowWelcomePanel       // 显示欢迎面板
     ]
 );
+
+/// 显示对话面板
+///
+/// 参数为可选的 session_id，用于打开特定会话的对话面板
+/// 如果不提供 session_id，则创建一个新的对话面板
+#[derive(Action, Clone, PartialEq, Deserialize)]
+#[action(namespace = agentx, no_json)]
+pub struct ShowConversationPanel {
+    pub session_id: Option<String>,
+}
+
+impl ShowConversationPanel {
+    /// Create a new action to show conversation panel for a specific session
+    pub fn with_session(session_id: String) -> Self {
+        Self {
+            session_id: Some(session_id),
+        }
+    }
+
+    /// Create a new action to show conversation panel without a specific session
+    pub fn new() -> Self {
+        Self { session_id: None }
+    }
+}
 
 // ============================================================================
 // Menu Actions - 菜单相关操作

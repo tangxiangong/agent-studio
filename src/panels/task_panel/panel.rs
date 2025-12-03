@@ -318,8 +318,21 @@ impl TaskPanel {
     fn select_task(&mut self, task_id: String, window: &mut Window, cx: &mut Context<Self>) {
         self.selected_task_id = Some(task_id.clone());
 
-        // Dispatch action to show conversation panel
-        window.dispatch_action(Box::new(ShowConversationPanel), cx);
+        // Find the task to get its session_id
+        let session_id = self
+            .workspaces
+            .iter()
+            .flat_map(|w| &w.tasks)
+            .find(|t| t.id == task_id)
+            .and_then(|t| t.session_id.clone());
+
+        // Dispatch action to show conversation panel with session_id
+        let action = if let Some(session_id) = session_id {
+            ShowConversationPanel::with_session(session_id)
+        } else {
+            ShowConversationPanel::new()
+        };
+        window.dispatch_action(Box::new(action), cx);
         cx.notify();
     }
 

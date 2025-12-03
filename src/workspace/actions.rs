@@ -32,17 +32,22 @@ impl DockWorkspace {
 
     /// Helper method to show ConversationPanelAcp in the current active tab
     /// This will add the panel to the current TabPanel instead of replacing the entire center
-    fn show_conversation_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let _conversation_panel = Arc::new(DockPanelContainer::panel::<ConversationPanelAcp>(
-            window, cx,
-        ));
-        let conversation_panel = DockPanelContainer::panel::<ConversationPanelAcp>(window, cx);
+    ///
+    /// If session_id is provided, it will load the conversation history for that session
+    /// Otherwise, it will create a new conversation panel with mock data
+    fn show_conversation_panel(&mut self, session_id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        let conversation_panel = if let Some(session_id) = session_id {
+            // Create panel for specific session (will load history automatically)
+            DockPanelContainer::panel_for_session(session_id, window, cx)
+        } else {
+            // Create new panel without session (mock data)
+            DockPanelContainer::panel::<ConversationPanelAcp>(window, cx)
+        };
+
         let conversation_item =
             DockItem::tab(conversation_panel, &self.dock_area.downgrade(), window, cx);
         self.dock_area.update(cx, |dock_area, cx| {
             dock_area.set_center(conversation_item, window, cx);
-            // Add to current center TabPanel, similar to clicking a file in an editor
-            // dock_area.add_panel(conversation_panel, DockPlacement::Center, None, window, cx);
         });
     }
     /// Handle AddPanel action - randomly add a conversation panel to specified dock area
@@ -145,11 +150,11 @@ impl DockWorkspace {
     /// Handle ShowConversationPanel action - display conversation panel
     pub(super) fn on_action_show_conversation_panel(
         &mut self,
-        _: &ShowConversationPanel,
+        action: &ShowConversationPanel,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.show_conversation_panel(window, cx);
+        self.show_conversation_panel(action.session_id.clone(), window, cx);
     }
 
     /// Handle NewSessionConversationPanel action - add a new conversation panel

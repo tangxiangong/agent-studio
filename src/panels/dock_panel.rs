@@ -214,6 +214,33 @@ impl DockPanelContainer {
         view
     }
 
+    /// Create a panel for a specific session (currently only supports ConversationPanelAcp)
+    /// This will load the conversation history for that session
+    pub fn panel_for_session(session_id: String, window: &mut Window, cx: &mut App) -> Entity<Self> {
+        use crate::panels::conversation_acp::ConversationPanelAcp;
+
+        let name = ConversationPanelAcp::title();
+        let description = ConversationPanelAcp::description();
+        let story = ConversationPanelAcp::view_for_session(session_id, window, cx);
+        let story_klass = ConversationPanelAcp::klass();
+
+        let view = cx.new(|cx| {
+            let mut container = Self::new(cx)
+                .story(story.into(), story_klass)
+                .on_active(ConversationPanelAcp::on_active_any);
+            container.focus_handle = cx.focus_handle();
+            container.closable = ConversationPanelAcp::closable();
+            container.zoomable = ConversationPanelAcp::zoomable();
+            container.name = name.into();
+            container.description = description.into();
+            container.title_bg = ConversationPanelAcp::title_bg();
+            container.paddings = ConversationPanelAcp::paddings();
+            container
+        });
+
+        view
+    }
+
     pub fn width(mut self, width: gpui::Pixels) -> Self {
         self.width = Some(width);
         self

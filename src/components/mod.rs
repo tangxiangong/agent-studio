@@ -2,7 +2,7 @@ mod agent_message;
 mod agent_todo_list;
 mod chat_input_box;
 mod permission_request;
-mod task_list_item;
+// mod task_list_item;
 mod tool_call_item;
 mod user_message;
 

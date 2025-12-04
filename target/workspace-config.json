@@ -9,7 +9,7 @@
     },
     {
       "id": "f3cedffc-d357-432b-b81e-ea6c35fcfa10",
-      "name": "gpui-component",
+      "name": "Claude Code Rust",
       "path": "/Users/shihua/Code/AIAgent/gpui-component",
       "created_at": 1764695138,
       "last_accessed": 1764695138
@@ -20,6 +20,20 @@
       "path": "D:\\Code\\fileman",
       "created_at": 1764749721,
       "last_accessed": 1764749721
+    },
+    {
+      "id": "f1c5aa3b-8a64-45ad-b2d6-0719c4a66bc7",
+      "name": "themes",
+      "path": "D:\\Code\\gpui-component\\examples\\agentx\\themes",
+      "created_at": 1764827259,
+      "last_accessed": 1764827259
+    },
+    {
+      "id": "cb668cc8-69e6-452e-9067-cb96e51948ed",
+      "name": "examples",
+      "path": "D:\\Code\\gpui-component\\examples",
+      "created_at": 1764830728,
+      "last_accessed": 1764830728
     }
   ],
   "tasks": [
@@ -102,6 +116,36 @@
       "session_id": "019ae426-9b86-71bf-a7d5-d8f37cca7ef5",
       "status": "InProgress",
       "created_at": 1764764333
+    },
+    {
+      "id": "5a65b2ac-5d94-42fa-b98d-02021ed3a1b8",
+      "workspace_id": "9f86bc8d-1ab9-47a2-9ded-f01d9e954c10",
+      "name": "介绍一下本项目",
+      "agent_name": "Iflow",
+      "mode": "Auto",
+      "session_id": "5ad3835c-f58b-4916-a982-e66979277e2c",
+      "status": "InProgress",
+      "created_at": 1764816351
+    },
+    {
+      "id": "50f7d4f6-016b-4d8e-a194-92b6db9e0329",
+      "workspace_id": "9f86bc8d-1ab9-47a2-9ded-f01d9e954c10",
+      "name": "介绍一下本项目",
+      "agent_name": "Iflow",
+      "mode": "Auto",
+      "session_id": "67f8501e-3e97-4aa0-a210-0261668bb71f",
+      "status": "InProgress",
+      "created_at": 1764830853
+    },
+    {
+      "id": "40bf0f90-2fb2-4a6c-a441-1ea15a2eb28c",
+      "workspace_id": "9f86bc8d-1ab9-47a2-9ded-f01d9e954c10",
+      "name": "介绍一下",
+      "agent_name": "Iflow",
+      "mode": "Auto",
+      "session_id": "67f8501e-3e97-4aa0-a210-0261668bb71f",
+      "status": "InProgress",
+      "created_at": 1764830882
     }
   ],
   "active_workspace_id": "9f86bc8d-1ab9-47a2-9ded-f01d9e954c10"

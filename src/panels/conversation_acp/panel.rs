@@ -1185,7 +1185,7 @@ impl ConversationPanelAcp {
 
 impl DockPanel for ConversationPanelAcp {
     fn title() -> &'static str {
-        "Conversation (ACP)"
+        "Conversation"
     }
 
     fn description() -> &'static str {

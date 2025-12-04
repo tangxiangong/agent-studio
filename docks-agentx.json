@@ -14,24 +14,6 @@
                 "story_klass": "ConversationPanelAcp"
               }
             }
-          },
-          {
-            "panel_name": "DockPanelContainer",
-            "children": [],
-            "info": {
-              "panel": {
-                "story_klass": "ConversationPanelAcp"
-              }
-            }
-          },
-          {
-            "panel_name": "DockPanelContainer",
-            "children": [],
-            "info": {
-              "panel": {
-                "story_klass": "ConversationPanelAcp"
-              }
-            }
           }
         ],
         "info": {
@@ -44,9 +26,9 @@
     "info": {
       "stack": {
         "sizes": [
-          956.0
+          100.0
         ],
-        "axis": 1
+        "axis": 0
       }
     }
   },
@@ -77,7 +59,7 @@
       "info": {
         "stack": {
           "sizes": [
-            984.6667
+            100.0
           ],
           "axis": 1
         }
@@ -102,6 +84,15 @@
                   "story_klass": "CodeEditorPanel"
                 }
               }
+            },
+            {
+              "panel_name": "DockPanelContainer",
+              "children": [],
+              "info": {
+                "panel": {
+                  "story_klass": "SessionManagerPanel"
+                }
+              }
             }
           ],
           "info": {
@@ -114,14 +105,14 @@
       "info": {
         "stack": {
           "sizes": [
-            984.6667
+            100.0
           ],
           "axis": 1
         }
       }
     },
     "placement": "right",
-    "size": 563.99994,
+    "size": 480.0,
     "open": true
   },
   "bottom_dock": {
@@ -151,7 +142,7 @@
       "info": {
         "stack": {
           "sizes": [
-            28.666666
+            100.0
           ],
           "axis": 1
         }
@@ -159,6 +150,6 @@
     },
     "placement": "bottom",
     "size": 200.0,
-    "open": false
+    "open": true
   }
 }

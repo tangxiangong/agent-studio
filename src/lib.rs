@@ -1,6 +1,7 @@
 mod app;
 mod components;
 mod core;
+mod i18n;
 mod panels;
 mod schemas;
 mod task_data;
@@ -10,6 +11,7 @@ pub use app::key_binding;
 
 #[cfg(test)]
 mod test_mock_data;
+
 
 // Re-export from panels module
 use crate::panels::{DockPanel, DockPanelContainer, DockPanelState};
@@ -187,6 +189,7 @@ pub fn init(cx: &mut App) {
     gpui_component::init(cx);
     AppState::init(cx);
     themes::init(cx);
+    i18n::init(cx);
     panels::code_editor::init();
     menu::init(cx);
     key_binding::init(cx);

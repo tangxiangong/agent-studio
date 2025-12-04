@@ -25,7 +25,9 @@
       "Bash(RUST_LOG=debug cargo run:*)",
       "Bash(pkill:*)",
       "Bash(RUST_LOG=info,agentx::core::services=debug,agentx::panels::conversation_acp=debug cargo run:*)",
-      "Bash(RUST_LOG=info,agentx::core::services=debug cargo run:*)"
+      "Bash(RUST_LOG=info,agentx::core::services=debug cargo run:*)",
+      "Bash(RUST_LOG=info,agentx::panels::welcome_panel=debug cargo build:*)",
+      "Bash(RUST_LOG=info,agentx::panels::welcome_panel=debug timeout 8 cargo run:*)"
     ],
     "deny": [],
     "ask": []

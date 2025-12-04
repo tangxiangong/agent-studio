@@ -32,6 +32,7 @@ tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "process", "f
 async-trait = "0.1.89"
 rfd = "0.15"
 uuid = { version = "1.11", features = ["v4"] }
+rust-i18n.workspace = true
 
 [lints]
 workspace = true

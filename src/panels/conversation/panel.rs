@@ -9,8 +9,8 @@ use gpui_component::{
 use agent_client_protocol::{ContentChunk, ImageContent, SessionUpdate, ToolCall};
 
 use crate::{
-    panels::dock_panel::DockPanel, AgentMessage, AgentTodoList, AppState, ChatInputBox,
-    SendMessageToSession,
+    app::actions::AddCodeSelection, panels::dock_panel::DockPanel, AgentMessage, AgentTodoList,
+    AppState, ChatInputBox, SendMessageToSession,
 };
 
 // Import from submodules
@@ -36,6 +36,8 @@ pub struct ConversationPanel {
     input_state: Entity<InputState>,
     /// List of pasted images: (ImageContent, filename)
     pasted_images: Vec<(ImageContent, String)>,
+    /// List of code selections from editor
+    code_selections: Vec<AddCodeSelection>,
 }
 
 impl ConversationPanel {
@@ -45,6 +47,7 @@ impl ConversationPanel {
         let entity = cx.new(|cx| Self::new(window, cx));
         Self::subscribe_to_updates(&entity, None, cx);
         Self::subscribe_to_permissions(&entity, None, cx);
+        Self::subscribe_to_code_selections(&entity, cx);
         log::info!("✅ ConversationPanel view created and subscribed");
         entity
     }
@@ -59,6 +62,7 @@ impl ConversationPanel {
 
         Self::subscribe_to_updates(&entity, Some(session_id.clone()), cx);
         Self::subscribe_to_permissions(&entity, Some(session_id.clone()), cx);
+        Self::subscribe_to_code_selections(&entity, cx);
         log::info!("✅ ConversationPanel created for session: {}", session_id);
         entity
     }
@@ -90,6 +94,7 @@ impl ConversationPanel {
             scroll_handle,
             input_state,
             pasted_images: Vec::new(),
+            code_selections: Vec::new(),
         }
     }
 
@@ -115,6 +120,7 @@ impl ConversationPanel {
             scroll_handle,
             input_state,
             pasted_images: Vec::new(),
+            code_selections: Vec::new(),
         }
     }
 
@@ -375,6 +381,80 @@ impl ConversationPanel {
 
         let filter_log_str = filter_log.as_deref().unwrap_or("all sessions");
         log::info!("Subscribed to permission bus for: {}", filter_log_str);
+    }
+
+    /// Subscribe to CodeSelectionBus to receive code selection events
+    pub fn subscribe_to_code_selections(entity: &Entity<Self>, cx: &mut App) {
+        let weak_entity = entity.downgrade();
+        let code_selection_bus = AppState::global(cx).code_selection_bus.clone();
+
+        // Create unbounded channel for cross-thread communication
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<
+            crate::core::event_bus::CodeSelectionEvent,
+        >();
+
+        if let Ok(mut bus) = code_selection_bus.lock() {
+            log::info!("[ConversationPanel] Subscribing to CodeSelectionBus with channel");
+
+            bus.subscribe(move |event| {
+                log::info!(
+                    "[ConversationPanel] CodeSelectionBus callback - file: {}, lines: {}~{}, sending to channel",
+                    event.selection.file_path,
+                    event.selection.start_line,
+                    event.selection.end_line
+                );
+
+                // Send event to channel (runs in event bus thread)
+                let _ = tx.send(event.clone());
+            });
+
+            log::info!("[ConversationPanel] Successfully subscribed to CodeSelectionBus");
+        } else {
+            log::error!("[ConversationPanel] Failed to lock CodeSelectionBus for subscription");
+        }
+
+        // Spawn background task to receive from channel and update entity
+        cx.spawn(async move |cx| {
+            log::info!("[ConversationPanel] Starting CodeSelection background task");
+
+            while let Some(event) = rx.recv().await {
+                log::info!(
+                    "[ConversationPanel] Channel received event - file: {}, lines: {}~{}",
+                    event.selection.file_path,
+                    event.selection.start_line,
+                    event.selection.end_line
+                );
+
+                // Update entity in GPUI context
+                if let Some(entity) = weak_entity.upgrade() {
+                    let _ = cx.update(|cx| {
+                        entity.update(cx, |this, cx| {
+                            log::info!(
+                                "[ConversationPanel] Adding code selection to list (current count: {})",
+                                this.code_selections.len()
+                            );
+
+                            this.code_selections.push(event.selection.clone());
+
+                            log::info!(
+                                "[ConversationPanel] Code selection added (new count: {})",
+                                this.code_selections.len()
+                            );
+
+                            cx.notify();
+                        });
+                    });
+                } else {
+                    log::debug!("[ConversationPanel] Entity dropped, stopping background task");
+                    break;
+                }
+            }
+
+            log::info!("[ConversationPanel] CodeSelection background task ended");
+        })
+        .detach();
+
+        log::info!("[ConversationPanel] Subscribed to CodeSelectionBus");
     }
 
     /// Helper to add an update to the rendered items list
@@ -881,6 +961,7 @@ impl Render for ConversationPanel {
                         let entity = cx.entity().clone();
                         ChatInputBox::new("chat-input", self.input_state.clone())
                             .pasted_images(self.pasted_images.clone())
+                            .code_selections(self.code_selections.clone())
                             .on_paste(move |window, cx| {
                                 entity.update(cx, |this, cx| {
                                     this.handle_paste(window, cx);
@@ -890,6 +971,13 @@ impl Render for ConversationPanel {
                                 // Remove the image at the given index
                                 if *idx < this.pasted_images.len() {
                                     this.pasted_images.remove(*idx);
+                                    cx.notify();
+                                }
+                            }))
+                            .on_remove_code_selection(cx.listener(|this, idx, _, cx| {
+                                // Remove the code selection at the given index
+                                if *idx < this.code_selections.len() {
+                                    this.code_selections.remove(*idx);
                                     cx.notify();
                                 }
                             }))
@@ -904,8 +992,9 @@ impl Render for ConversationPanel {
                                     // Send the message with images if any
                                     this.send_message(text, &this.pasted_images, window, cx);
 
-                                    // Clear pasted images after sending
+                                    // Clear pasted images and code selections after sending
                                     this.pasted_images.clear();
+                                    this.code_selections.clear();
                                     cx.notify();
                                 }
                             }))

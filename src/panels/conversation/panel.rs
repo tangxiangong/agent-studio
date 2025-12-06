@@ -1,17 +1,16 @@
 use gpui::{
-    App, ClipboardEntry, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, ScrollHandle, SharedString, Styled, Window, div, http_client::http::response, prelude::*, px
+    App, ClipboardEntry, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render, ScrollHandle, SharedString, Styled, Window, div, prelude::*, px
 };
 use gpui_component::{
     h_flex, input::InputState, scroll::ScrollableElement, v_flex, ActiveTheme, Icon, IconName,
 };
 
 // Use the published ACP schema crate
-use agent_client_protocol::{
-    ContentBlock, ContentChunk, ImageContent, PromptRequest, SessionId, SessionUpdate, ToolCall,
-};
+use agent_client_protocol::{ContentChunk, ImageContent, SessionUpdate, ToolCall};
 
 use crate::{
-    panels::dock_panel::DockPanel, AgentHandle, AgentMessage, AgentTodoList, AppState, ChatInputBox,
+    panels::dock_panel::DockPanel, AgentMessage, AgentTodoList, AppState, ChatInputBox,
+    SendMessageToSession,
 };
 
 // Import from submodules
@@ -712,10 +711,12 @@ impl ConversationPanel {
     }
 
     /// Send a message to the current session
+    /// Dispatches SendMessageToSession action to workspace for handling
     fn send_message(
         &self,
         text: String,
         images: &Vec<(ImageContent, String)>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         // Only send if we have a session_id
@@ -724,73 +725,16 @@ impl ConversationPanel {
             return;
         };
 
-        log::info!("Sending message to session: {}", session_id);
+        log::info!("Dispatching SendMessageToSession action for session: {}", session_id);
 
-        let session_id = session_id.clone();
-        let images_clone = images.clone();
+        // Create action and dispatch to workspace
+        let action = SendMessageToSession {
+            session_id: session_id.clone(),
+            message: text,
+            images: images.clone(),
+        };
 
-        // Spawn async task to send the message
-        cx.spawn(async move |_this, cx| {
-            // Immediately publish user message to session bus for instant UI feedback
-            use std::sync::Arc;
-
-            // Create user message chunk
-            let content_block = ContentBlock::from(text.clone());
-            let content_chunk = ContentChunk::new(content_block);
-
-            let user_event = crate::core::event_bus::session_bus::SessionUpdateEvent {
-                session_id: session_id.clone(),
-                update: Arc::new(SessionUpdate::UserMessageChunk(content_chunk)),
-            };
-
-            // Publish to session bus
-            cx.update(|cx| {
-                AppState::global(cx).session_bus.publish(user_event);
-            })
-            .ok();
-            log::info!("Published user message to session bus: {}", session_id);
-
-            // Get agent handle and send prompt
-            let agent_handle: Option<std::sync::Arc<AgentHandle>> = cx
-                .update(|cx| {
-                    AppState::global(cx).agent_manager().and_then(|m| {
-                        // Get the first available agent
-                        let agents = m.list_agents();
-                        agents.first().and_then(|name| m.get(name))
-                    })
-                })
-                .ok()
-                .flatten();
-
-            if let Some(agent_handle) = agent_handle {
-                // Build prompt with text and images
-                let mut prompt_blocks: Vec<ContentBlock> = Vec::new();
-
-                // Add text content
-                prompt_blocks.push(text.clone().into());
-
-                // Add image contents - convert ImageContent to ImageContent
-                for (image_content, _filename) in images_clone.iter() {
-                    prompt_blocks.push(ContentBlock::Image(image_content.clone()));
-                }
-                log::debug!("---------> Sending prompt: {:?}", prompt_blocks);
-                // Send the prompt
-                let request =
-                    PromptRequest::new(SessionId::from(session_id.to_string()), prompt_blocks);
-
-                match agent_handle.prompt(request).await {
-                    Ok(response) => {
-                        log::info!("Prompt sent successfully to session: {}", session_id);
-                    }
-                    Err(e) => {
-                        log::error!("Failed to send prompt to session {}: {}", session_id, e);
-                    }
-                }
-            } else {
-                log::error!("No agent handle available");
-            }
-        })
-        .detach();
+        window.dispatch_action(Box::new(action), cx);
     }
 }
 
@@ -958,7 +902,7 @@ impl Render for ConversationPanel {
                                     });
 
                                     // Send the message with images if any
-                                    this.send_message(text, &this.pasted_images, cx);
+                                    this.send_message(text, &this.pasted_images, window, cx);
 
                                     // Clear pasted images after sending
                                     this.pasted_images.clear();

@@ -37,9 +37,9 @@ pub use app::{
     actions::{
         About, AddPanel, AddSessionPanel, AddSessionToList, CloseWindow, CreateTaskFromWelcome,
         Info, NewSessionConversationPanel, Open, Quit, SelectFont, SelectLocale, SelectRadius,
-        SelectScrollbarShow, SelectedAgentTask, ShowConversationPanel, ShowPanelInfo,
-        ShowToolCallDetail, ShowWelcomePanel, Tab, TabPrev, TestAction, ToggleDockToggleButton,
-        TogglePanelVisible, ToggleSearch,
+        SelectScrollbarShow, SelectedAgentTask, SendMessageToSession, ShowConversationPanel,
+        ShowPanelInfo, ShowToolCallDetail, ShowWelcomePanel, Tab, TabPrev, TestAction,
+        ToggleDockToggleButton, TogglePanelVisible, ToggleSearch,
     },
     app_menus, menu, themes, title_bar,
 };

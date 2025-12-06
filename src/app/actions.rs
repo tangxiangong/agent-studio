@@ -138,6 +138,21 @@ pub struct CreateTaskFromWelcome {
     /// 附加的图片列表 (ImageContent, filename)
     pub images: Vec<(ImageContent, String)>,
 }
+
+/// 发送消息到指定会话
+///
+/// 用于在会话面板中发送用户消息，由 ConversationPanel 触发
+/// 实际的 Agent 执行逻辑在 workspace/actions.rs 中实现
+#[derive(Action, Clone, Debug, PartialEq, Deserialize)]
+#[action(namespace = agentx, no_json)]
+pub struct SendMessageToSession {
+    /// 会话唯一标识符
+    pub session_id: String,
+    /// 消息文本内容
+    pub message: String,
+    /// 附带的图片列表 (ImageContent, filename)
+    pub images: Vec<(ImageContent, String)>,
+}
 /// 显示会话对话面板
 ///
 #[derive(Action, Clone, PartialEq, Deserialize)]

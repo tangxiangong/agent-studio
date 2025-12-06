@@ -9,8 +9,9 @@ use crate::{
     panels::{dock_panel::DockPanelContainer, DockPanel},
     title_bar::OpenSettings,
     utils, AddPanel, AppState, ConversationPanel, CreateTaskFromWelcome,
-    NewSessionConversationPanel, SettingsPanel, ShowConversationPanel, ShowToolCallDetail,
-    ShowWelcomePanel, ToggleDockToggleButton, TogglePanelVisible, WelcomePanel,
+    NewSessionConversationPanel, SendMessageToSession, SettingsPanel, ShowConversationPanel,
+    ShowToolCallDetail, ShowWelcomePanel, ToggleDockToggleButton, TogglePanelVisible,
+    WelcomePanel,
 };
 
 use super::DockWorkspace;
@@ -499,5 +500,86 @@ impl DockWorkspace {
         });
 
         view
+    }
+
+    /// Handle SendMessageToSession action - send a user message to an agent session
+    /// This separates the Agent execution logic from the ConversationPanel UI component
+    pub(super) fn on_action_send_message_to_session(
+        &mut self,
+        action: &SendMessageToSession,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let session_id = action.session_id.clone();
+        let message = action.message.clone();
+        let images = action.images.clone();
+
+        log::info!("Sending message to session: {}", session_id);
+
+        // Spawn async task to send the message
+        cx.spawn(async move |_this, cx| {
+            // Step 1: Immediately publish user message to session bus for instant UI feedback
+            use std::sync::Arc;
+
+            // Create user message chunk
+            let content_block = acp::ContentBlock::from(message.clone());
+            let content_chunk = acp::ContentChunk::new(content_block);
+
+            let user_event = crate::core::event_bus::session_bus::SessionUpdateEvent {
+                session_id: session_id.clone(),
+                update: Arc::new(acp::SessionUpdate::UserMessageChunk(content_chunk)),
+            };
+
+            // Publish to session bus
+            cx.update(|cx| {
+                AppState::global(cx).session_bus.publish(user_event);
+            })
+            .ok();
+            log::info!("Published user message to session bus: {}", session_id);
+
+            // Step 2: Get agent handle and send prompt
+            let agent_handle: Option<std::sync::Arc<crate::AgentHandle>> = cx
+                .update(|cx| {
+                    AppState::global(cx).agent_manager().and_then(|m| {
+                        // Get the first available agent
+                        let agents = m.list_agents();
+                        agents.first().and_then(|name| m.get(name))
+                    })
+                })
+                .ok()
+                .flatten();
+
+            if let Some(agent_handle) = agent_handle {
+                // Build prompt with text and images
+                let mut prompt_blocks: Vec<acp::ContentBlock> = Vec::new();
+
+                // Add text content
+                prompt_blocks.push(message.clone().into());
+
+                // Add image contents
+                for (image_content, _filename) in images.iter() {
+                    prompt_blocks.push(acp::ContentBlock::Image(image_content.clone()));
+                }
+                log::debug!("---------> Sending prompt: {:?}", prompt_blocks);
+
+                // Send the prompt
+                let request = acp::PromptRequest::new(
+                    acp::SessionId::from(session_id.to_string()),
+                    prompt_blocks,
+                );
+
+                match agent_handle.prompt(request).await {
+                    Ok(_response) => {
+                        log::info!("Prompt sent successfully to session: {}", session_id);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to send prompt to session {}: {}", session_id, e);
+                    }
+                }
+            } else {
+                log::error!("No agent handle available");
+            }
+        })
+        .detach();
     }
 }

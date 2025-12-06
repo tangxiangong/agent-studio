@@ -1,6 +1,10 @@
-// Conversation panel submodules
-mod panel;
-mod types;
+// Conversation panel module - modularized for better maintainability
 
-// Re-export the main panel
+mod helpers;
+mod types;
+mod components;
+mod rendered_item;
+mod panel;
+
+// Re-export public API
 pub use panel::ConversationPanel;

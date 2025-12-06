@@ -33,7 +33,8 @@
       "Bash(RUST_LOG=debug timeout 10 cargo run:*)",
       "WebSearch",
       "Bash(xargs cat:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

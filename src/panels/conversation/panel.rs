@@ -1,558 +1,26 @@
 use gpui::{
-    div, prelude::*, px, App, ClipboardEntry, Context, Div, ElementId, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, ScrollHandle, SharedString,
-    StatefulInteractiveElement, Styled, Window,
+    div, prelude::*, px, App, ClipboardEntry, Context, Entity, FocusHandle, Focusable,
+    IntoElement, ParentElement, Render, ScrollHandle, SharedString, Styled, Window,
 };
 use gpui_component::{
-    button::{Button, ButtonVariants},
-    collapsible::Collapsible,
-    h_flex,
-    input::InputState,
-    scroll::ScrollableElement,
-    v_flex, ActiveTheme, Icon, IconName, Sizable,
+    h_flex, input::InputState, scroll::ScrollableElement, v_flex, ActiveTheme, Icon, IconName,
 };
 
 // Use the published ACP schema crate
-use agent_client_protocol_schema::{
-    ContentBlock, ContentChunk, EmbeddedResourceResource, ImageContent, Plan, SessionUpdate, ToolCall, ToolCallContent, ToolCallStatus
-};
+use agent_client_protocol_schema::{SessionUpdate, ImageContent};
 
 use crate::{
-    AgentMessage, AgentMessageData, AgentTodoList, AppState, ChatInputBox, PermissionRequestView, ShowToolCallDetail, UserMessageData, core::agent::AgentHandle, panels::dock_panel::DockPanel
+    AgentMessage, AgentTodoList, AppState, ChatInputBox,
+    core::agent::AgentHandle, panels::dock_panel::DockPanel,
 };
 
-// Import from types module
-use super::types::{get_file_icon, ResourceInfo, ToolCallStatusExt, ToolKindExt};
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/// Extract text content from XML-like tags using regex based on ToolKind
-/// For example: "```\n<tool_use_error>File does not exist.</tool_use_error>\n```"
-/// Returns: "File does not exist."
-/// 
-/// This function decides whether to extract XML content based on the tool type:
-/// - For Execute, Other, and similar types: Extract XML content
-/// - For other types: Return original text
-fn extract_xml_content(text: &str, tool_kind: &agent_client_protocol_schema::ToolKind) -> String {
-    use regex::Regex;
-    
-    // Decide whether to extract XML based on tool kind
-    let should_extract = matches!(
-        tool_kind,
-        agent_client_protocol_schema::ToolKind::Execute 
-        | agent_client_protocol_schema::ToolKind::Other
-        | agent_client_protocol_schema::ToolKind::Read
-    );
-    
-    if !should_extract {
-        // For other tool types, return the text as-is (just strip code fences)
-        return text.trim_start_matches("```")
-            .trim_end_matches("```")
-            .trim()
-            .to_string();
-    }
-    
-    // Pattern to match XML-like tags: <tag_name>content</tag_name>
-    // This captures the content between any XML tags
-    let re = Regex::new(r"<[^>]+>([^<]*)</[^>]+>").unwrap();
-    
-    let mut result = String::new();
-    for cap in re.captures_iter(text) {
-        if let Some(content) = cap.get(1) {
-            if !result.is_empty() {
-                result.push('\n');
-            }
-            result.push_str(content.as_str());
-        }
-    }
-    
-    // If no XML tags found, return the original text (stripped of markdown code fences)
-    if result.is_empty() {
-        text.trim_start_matches("```")
-            .trim_end_matches("```")
-            .trim()
-            .to_string()
-    } else {
-        result
-    }
-}
-
-// ============================================================================
-// Stateful Resource Item
-// ============================================================================
-
-struct ResourceItemState {
-    resource: ResourceInfo,
-    open: bool,
-}
-
-impl ResourceItemState {
-    fn new(resource: ResourceInfo) -> Self {
-        Self {
-            resource,
-            open: false,
-        }
-    }
-
-    fn toggle(&mut self, cx: &mut Context<Self>) {
-        self.open = !self.open;
-        cx.notify();
-    }
-}
-
-impl Render for ResourceItemState {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let line_count = self
-            .resource
-            .text
-            .as_ref()
-            .map(|t| t.lines().count())
-            .unwrap_or(0);
-
-        let is_open = self.open;
-        let has_content = self.resource.text.is_some();
-        let resource_name = self.resource.name.clone();
-        let mime_type = self.resource.mime_type.clone();
-
-        Collapsible::new()
-            .open(is_open)
-            .w_full()
-            .gap_2()
-            .child(
-                h_flex()
-                    .items_center()
-                    .gap_2()
-                    .p_2()
-                    .rounded(cx.theme().radius)
-                    .bg(cx.theme().muted)
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        Icon::new(get_file_icon(&mime_type.map(|s| s.to_string())))
-                            .size(px(16.))
-                            .text_color(cx.theme().accent),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(px(13.))
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .text_color(cx.theme().foreground)
-                            .child(resource_name.clone()),
-                    )
-                    .when(line_count > 0, |this| {
-                        this.child(
-                            div()
-                                .text_size(px(11.))
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("{} lines", line_count)),
-                        )
-                    })
-                    .when(has_content, |this| {
-                        this.child(
-                            Button::new(SharedString::from(format!(
-                                "resource-toggle-{}",
-                                resource_name
-                            )))
-                            .icon(if is_open {
-                                IconName::ChevronUp
-                            } else {
-                                IconName::ChevronDown
-                            })
-                            .ghost()
-                            .xsmall()
-                            .on_click(cx.listener(
-                                |this, _ev, _window, cx| {
-                                    this.toggle(cx);
-                                },
-                            )),
-                        )
-                    }),
-            )
-            .when(has_content, |this| {
-                this.content(
-                    div()
-                        .w_full()
-                        .p_3()
-                        .rounded(cx.theme().radius)
-                        .bg(cx.theme().secondary)
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .font_family("Monaco, 'Courier New', monospace")
-                                .text_color(cx.theme().foreground)
-                                .line_height(px(18.))
-                                .child(self.resource.text.clone().unwrap_or_default()),
-                        ),
-                )
-            })
-    }
-}
-
-// ============================================================================
-// Stateful Tool Call Item
-// ============================================================================
-
-struct ToolCallItemState {
-    tool_call: ToolCall,
-    open: bool,
-}
-
-impl ToolCallItemState {
-    fn new(tool_call: ToolCall, open: bool) -> Self {
-        Self { tool_call, open }
-    }
-
-    fn toggle(&mut self, cx: &mut Context<Self>) {
-        self.open = !self.open;
-        cx.notify();
-    }
-
-    fn has_content(&self) -> bool {
-        !self.tool_call.content.is_empty()
-    }
-
-    /// Update this tool call with fields from a ToolCallUpdate
-    fn apply_update(
-        &mut self,
-        update_fields: agent_client_protocol_schema::ToolCallUpdateFields,
-        cx: &mut Context<Self>,
-    ) {
-        log::debug!("Applying update to tool call: {:?}", update_fields);
-        // Use the built-in update method from ToolCall
-        self.tool_call.update(update_fields);
-
-        // Auto-open when tool call completes or fails (so user can see result)
-        match self.tool_call.status {
-            ToolCallStatus::Completed | ToolCallStatus::Failed => {
-                if self.has_content() {
-                    self.open = true;
-                }
-            }
-            _ => {}
-        }
-
-        cx.notify();
-    }
-
-    /// Get the tool call ID for matching updates
-    fn tool_call_id(&self) -> &agent_client_protocol_schema::ToolCallId {
-        &self.tool_call.tool_call_id
-    }
-    /// Get formatted display title for the tool call
-    /// For Read tools, formats as: filename#L<offset>-<offset+limit>
-    /// For other tools, returns the original title
-    fn get_display_title(&self) -> String {
-        use agent_client_protocol_schema::ToolKind;
-        use std::path::Path;
-
-        // Only format Read tool calls
-        if !matches!(self.tool_call.kind, ToolKind::Read) {
-            return self.tool_call.title.clone();
-        }
-
-        // Try to extract file information from locations
-        if let Some(first_location) = self.tool_call.locations.first() {
-            // Extract filename from path
-            let filename = first_location
-                .path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("file");
-
-            // Try to get line range from raw_input (which contains offset and limit)
-            if let Some(raw_input) = self.tool_call.raw_input.as_ref() {
-                // raw_input is a serde_json::Value, so we need to parse it as an object
-                if let Some(raw_obj) = raw_input.as_object() {
-                    let offset = raw_obj
-                        .get("offset")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(1);
-                    let limit = raw_obj
-                        .get("limit")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(100);
-                    
-                    let end_line = offset + limit - 1;
-                    return format!("Read ({}#L{}-L{})", filename, offset, end_line);
-                }
-            }
-
-            // If we have location but no line info, just return filename  
-            return format!("{}", filename);
-        }
-
-        // Fallback to original title
-        self.tool_call.title.clone()
-    }
-}
-
-impl Render for ToolCallItemState {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let has_content = self.has_content();
-        let status_color = match self.tool_call.status {
-            ToolCallStatus::Completed => cx.theme().green,
-            ToolCallStatus::Failed => cx.theme().red,
-            ToolCallStatus::InProgress => cx.theme().accent,
-            ToolCallStatus::Pending | _ => cx.theme().muted_foreground,
-        };
-
-        let open = self.open;
-        let tool_call_id = self.tool_call.tool_call_id.clone();
-        let title = self.get_display_title(); // Use formatted title
-        let kind_icon = self.tool_call.kind.icon();
-        let status_icon = self.tool_call.status.icon();
-
-        Collapsible::new()
-            .open(open)
-            .w_full()
-            .gap_2()
-            .child(
-                h_flex()
-                    .items_center()
-                    .gap_3()
-                    .p_2()
-                    .rounded(cx.theme().radius)
-                    .bg(cx.theme().secondary)
-                    .child(
-                        Icon::new(kind_icon)
-                            .size(px(16.))
-                            .text_color(cx.theme().muted_foreground),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(px(13.))
-                            .text_color(cx.theme().foreground)
-                            .child(title),
-                    )
-                    .child(
-                        Icon::new(status_icon)
-                            .size(px(14.))
-                            .text_color(status_color),
-                    )
-                    .when(has_content, |this| {
-                        let tool_call_clone_for_detail = self.tool_call.clone();
-                        this.child(
-                            h_flex()
-                                .gap_2()
-                                .child(
-                                    Button::new(SharedString::from(format!(
-                                        "tool-call-{}-toggle",
-                                        tool_call_id
-                                    )))
-                                    .icon(if open {
-                                        IconName::ChevronUp
-                                    } else {
-                                        IconName::ChevronDown
-                                    })
-                                    .ghost()
-                                    .xsmall()
-                                    .on_click(cx.listener(|this, _ev, _window, cx| {
-                                        this.toggle(cx);
-                                    })),
-                                )
-                                .child(
-                                    Button::new(SharedString::from(format!(
-                                        "tool-call-{}-detail",
-                                        tool_call_id
-                                    )))
-                                    .icon(IconName::Info)
-                                    .ghost()
-                                    .xsmall()
-                                    .on_click(cx.listener(move |_, _ev, window, cx| {
-                                        // Dispatch ShowToolCallDetail action
-                                        let action = ShowToolCallDetail {
-                                            tool_call_id: tool_call_id.to_string(),
-                                            tool_call: tool_call_clone_for_detail.clone(),
-                                        };
-                                        log::debug!("Dispatching ShowToolCallDetail action from ConversationPanel");
-                                        window.dispatch_action(Box::new(action), cx);
-                                    })),
-                                ),
-                        )
-                    }),
-            )
-            .when(has_content, |this| {
-                this.content(
-                    v_flex()
-                        .gap_1()
-                        .p_3()
-                        .pl_8()
-                        .children(self.tool_call.content.iter().filter_map(|content| {
-                            match content {
-                                ToolCallContent::Content(c) => match &c.content {
-                                    ContentBlock::Text(text) => {
-                                        let cleaned_text =
-                                            extract_xml_content(&text.text, &self.tool_call.kind);
-                                        Some(
-                                            div()
-                                                .text_size(px(12.))
-                                                .text_color(cx.theme().muted_foreground)
-                                                .line_height(px(18.))
-                                                .child(cleaned_text),
-                                        )
-                                    }
-                                    _ => None,
-                                },
-                                ToolCallContent::Diff(diff) => Some(
-                                    div()
-                                        .text_size(px(12.))
-                                        .text_color(cx.theme().muted_foreground)
-                                        .line_height(px(18.))
-                                        .child(format!(
-                                            "Modified: {}\n{} -> {}",
-                                            diff.path.display(),
-                                            diff.old_text.as_deref().unwrap_or("<new file>"),
-                                            diff.new_text
-                                        )),
-                                ),
-                                ToolCallContent::Terminal(terminal) => Some(
-                                    div()
-                                        .text_size(px(12.))
-                                        .text_color(cx.theme().muted_foreground)
-                                        .line_height(px(18.))
-                                        .child(format!("Terminal: {}", terminal.terminal_id)),
-                                ),
-                                _ => None,
-                            }
-                        })),
-                )
-                .max_h(px(180.)) // Max 10 lines (18px * 10)
-                .overflow_hidden()
-            })
-    }
-}
-
-// ============================================================================
-// User Message View
-// ============================================================================
-
-struct UserMessageView {
-    data: Entity<UserMessageData>,
-    resource_items: Vec<Entity<ResourceItemState>>,
-}
-
-impl Render for UserMessageView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let data = self.data.read(cx).clone();
-        let mut resource_index = 0;
-
-        v_flex()
-            .gap_3()
-            .w_full()
-            .child(
-                h_flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        Icon::new(IconName::User)
-                            .size(px(16.))
-                            .text_color(cx.theme().accent),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(13.))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(cx.theme().foreground)
-                            .child("You"),
-                    ),
-            )
-            .child(
-                v_flex()
-                    .gap_3()
-                    .pl_6()
-                    .w_full()
-                    .children(data.contents.into_iter().filter_map(|content| {
-                        match &content {
-                            ContentBlock::Text(text_content) => Some(
-                                div()
-                                    .text_size(px(14.))
-                                    .text_color(cx.theme().foreground)
-                                    .line_height(px(22.))
-                                    .child(text_content.text.clone())
-                                    .into_any_element(),
-                            ),
-                            ContentBlock::ResourceLink(_) | ContentBlock::Resource(_) => {
-                                if ResourceInfo::from_content_block(&content).is_some() {
-                                    let current_index = resource_index;
-                                    resource_index += 1;
-
-                                    if let Some(item) = self.resource_items.get(current_index) {
-                                        Some(item.clone().into_any_element())
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    None
-                                }
-                            }
-                            _ => None,
-                        }
-                    })),
-            )
-    }
-}
-
-// ============================================================================
-// Rendered Item
-// ============================================================================
-
-enum RenderedItem {
-    UserMessage(Entity<UserMessageView>),
-    /// Agent message with unique ID and mutable data (supports chunk merging)
-    AgentMessage(String, AgentMessageData),
-    /// Agent thought with mutable text (supports chunk merging)
-    AgentThought(String),
-    Plan(Plan),
-    ToolCall(Entity<ToolCallItemState>),
-    // Simple text updates for commands and mode changes
-    InfoUpdate(String),
-    // Permission request
-    PermissionRequest(Entity<PermissionRequestView>),
-}
-
-impl RenderedItem {
-    /// Try to append an AgentMessageChunk to this item (returns true if successful)
-    fn try_append_agent_message_chunk(&mut self, chunk: ContentChunk) -> bool {
-        if let RenderedItem::AgentMessage(_id, ref mut data) = self {
-            data.chunks.push(chunk);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Try to append an AgentThoughtChunk to this item (returns true if successful)
-    fn try_append_agent_thought_chunk(&mut self, text: String) -> bool {
-        if let RenderedItem::AgentThought(ref mut existing_text) = self {
-            existing_text.push_str(&text);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Mark an AgentMessage as complete (no more chunks expected)
-    fn mark_complete(&mut self) {
-        if let RenderedItem::AgentMessage(_id, ref mut data) = self {
-            data.meta.is_complete = true;
-        }
-    }
-
-    /// Check if this item can accept chunks of a given type
-    fn can_accept_agent_message_chunk(&self) -> bool {
-        matches!(self, RenderedItem::AgentMessage(..))
-    }
-
-    fn can_accept_agent_thought_chunk(&self) -> bool {
-        matches!(self, RenderedItem::AgentThought(..))
-    }
-}
+// Import from submodules
+use super::{
+    components::{ResourceItemState, ToolCallItemState, UserMessageView},
+    helpers::{extract_text_from_content, get_element_id, session_update_type_name},
+    rendered_item::{create_agent_message_data, RenderedItem},
+    types::ResourceInfo,
+};
 
 /// Conversation panel that displays SessionUpdate messages from ACP
 pub struct ConversationPanel {
@@ -621,7 +89,7 @@ impl ConversationPanel {
 
         let next_index = rendered_items.len();
 
-        let panel = Self {
+        Self {
             focus_handle,
             rendered_items,
             next_index,
@@ -629,9 +97,7 @@ impl ConversationPanel {
             scroll_handle,
             input_state,
             pasted_images: Vec::new(),
-        };
-
-        panel
+        }
     }
 
     fn new_for_session(session_id: String, window: &mut Window, cx: &mut App) -> Self {
@@ -925,7 +391,7 @@ impl ConversationPanel {
         index: usize,
         cx: &mut App,
     ) {
-        let update_type = Self::session_update_type_name(&update);
+        let update_type = session_update_type_name(&update);
         log::debug!("Processing SessionUpdate[{}]: {}", index, update_type);
 
         match update {
@@ -962,7 +428,7 @@ impl ConversationPanel {
                     log::debug!("  └─ Merged AgentMessageChunk into existing message");
                 } else {
                     log::debug!("  └─ Creating new AgentMessage");
-                    let data = Self::create_agent_message_data(chunk, index);
+                    let data = create_agent_message_data(chunk, index);
                     items.push(RenderedItem::AgentMessage(
                         format!("agent-msg-{}", index),
                         data,
@@ -970,7 +436,7 @@ impl ConversationPanel {
                 }
             }
             SessionUpdate::AgentThoughtChunk(chunk) => {
-                let text = Self::extract_text_from_content(&chunk.content);
+                let text = extract_text_from_content(&chunk.content);
 
                 // Try to merge with the last AgentThought item
                 let merged = items
@@ -1148,7 +614,10 @@ impl ConversationPanel {
         }
     }
 
-    fn create_user_message(chunk: ContentChunk, _index: usize, cx: &mut App) -> RenderedItem {
+    /// Create a UserMessage RenderedItem from a ContentChunk
+    fn create_user_message(chunk: agent_client_protocol_schema::ContentChunk, _index: usize, cx: &mut App) -> RenderedItem {
+        use crate::UserMessageData;
+
         let content_vec = vec![chunk.content.clone()];
         let user_data = UserMessageData::new("default-session").with_contents(content_vec.clone());
 
@@ -1168,63 +637,6 @@ impl ConversationPanel {
         });
 
         RenderedItem::UserMessage(entity)
-    }
-
-    fn create_agent_message_data(chunk: ContentChunk, _index: usize) -> AgentMessageData {
-        AgentMessageData::new("default-session").add_chunk(chunk)
-    }
-
-    /// Extract text from ContentBlock
-    fn extract_text_from_content(content: &ContentBlock) -> String {
-        match content {
-            ContentBlock::Text(text_content) => text_content.text.clone(),
-            ContentBlock::Image(img) => {
-                format!("[Image: {}]", img.mime_type)
-            }
-            ContentBlock::Audio(audio) => {
-                format!("[Audio: {}]", audio.mime_type)
-            }
-            ContentBlock::ResourceLink(link) => {
-                format!("[Resource: {}]", link.name)
-            }
-            ContentBlock::Resource(resource) => match &resource.resource {
-                EmbeddedResourceResource::TextResourceContents(text_res) => {
-                    format!(
-                        "[Resource: {}]\n{}",
-                        text_res.uri,
-                        &text_res.text[..text_res.text.len().min(200)]
-                    )
-                }
-                EmbeddedResourceResource::BlobResourceContents(blob_res) => {
-                    format!("[Binary Resource: {}]", blob_res.uri)
-                }
-                _ => "[Unknown Resource]".to_string(),
-            },
-            _ => "[Unknown Content]".to_string(),
-        }
-    }
-
-    /// Get a human-readable type name for SessionUpdate (for logging)
-    fn session_update_type_name(update: &SessionUpdate) -> &'static str {
-        match update {
-            SessionUpdate::UserMessageChunk(_) => "UserMessageChunk",
-            SessionUpdate::AgentMessageChunk(_) => "AgentMessageChunk",
-            SessionUpdate::AgentThoughtChunk(_) => "AgentThoughtChunk",
-            SessionUpdate::ToolCall(_) => "ToolCall",
-            SessionUpdate::ToolCallUpdate(_) => "ToolCallUpdate",
-            SessionUpdate::Plan(_) => "Plan",
-            SessionUpdate::AvailableCommandsUpdate(_) => "AvailableCommandsUpdate",
-            SessionUpdate::CurrentModeUpdate(_) => "CurrentModeUpdate",
-            _ => "Unknown/Future SessionUpdate Type",
-        }
-    }
-
-    fn get_id(id: &str) -> ElementId {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        id.hash(&mut hasher);
-        ElementId::from(("item", hasher.finish()))
     }
 
     /// Handle paste event and add images to pasted_images list
@@ -1337,7 +749,7 @@ impl ConversationPanel {
             log::info!("Published user message to session bus: {}", session_id);
 
             // Get agent handle and send prompt
-            let agent_handle: Option<Arc<AgentHandle>> = cx
+            let agent_handle: Option<std::sync::Arc<AgentHandle>> = cx
                 .update(|cx| {
                     AppState::global(cx).agent_manager().and_then(|m| {
                         // Get the first available agent
@@ -1348,44 +760,44 @@ impl ConversationPanel {
                 .ok()
                 .flatten();
 
-            // if let Some(agent_handle) = agent_handle {
-            //     // Build prompt with text and images
-            //     let mut prompt_blocks: Vec<agent_client_protocol::ContentBlock> = Vec::new();
+            if let Some(agent_handle) = agent_handle {
+                // Build prompt with text and images
+                let mut prompt_blocks: Vec<agent_client_protocol::ContentBlock> = Vec::new();
 
-            //     // Add text content
-            //     prompt_blocks.push(text.clone().into());
+                // Add text content
+                prompt_blocks.push(text.clone().into());
 
-            //     // Add image contents - convert schema::ImageContent to agent_client_protocol::ImageContent
-            //     for (image_content, _filename) in images_clone.iter() {
-            //         // Create agent_client_protocol::ImageContent from the data
-            //         let acp_image = agent_client_protocol::ImageContent {
-            //             annotations: None,
-            //             data: image_content.data.clone(),
-            //             mime_type: image_content.mime_type.clone(),
-            //             uri: image_content.uri.clone(),
-            //             meta: None,
-            //         };
-            //         prompt_blocks.push(agent_client_protocol::ContentBlock::Image(acp_image));
-            //     }
-            //     log::debug!("---------> Sending prompt: {:?}", prompt_blocks);
-            //     // Send the prompt
-            //     let request = agent_client_protocol::PromptRequest {
-            //         session_id: agent_client_protocol::SessionId::from(session_id.clone()),
-            //         prompt: prompt_blocks,
-            //         meta: None,
-            //     };
+                // Add image contents - convert schema::ImageContent to agent_client_protocol::ImageContent
+                for (image_content, _filename) in images_clone.iter() {
+                    // Create agent_client_protocol::ImageContent from the data
+                    let acp_image = agent_client_protocol::ImageContent {
+                        annotations: None,
+                        data: image_content.data.clone(),
+                        mime_type: image_content.mime_type.clone(),
+                        uri: image_content.uri.clone(),
+                        meta: None,
+                    };
+                    prompt_blocks.push(agent_client_protocol::ContentBlock::Image(acp_image));
+                }
+                log::debug!("---------> Sending prompt: {:?}", prompt_blocks);
+                // Send the prompt
+                let request = agent_client_protocol::PromptRequest {
+                    session_id: agent_client_protocol::SessionId::from(session_id.clone()),
+                    prompt: prompt_blocks,
+                    meta: None,
+                };
 
-            //     match agent_handle.prompt(request).await {
-            //         Ok(_) => {
-            //             log::info!("Prompt sent successfully to session: {}", session_id);
-            //         }
-            //         Err(e) => {
-            //             log::error!("Failed to send prompt to session {}: {}", session_id, e);
-            //         }
-            //     }
-            // } else {
-            //     log::error!("No agent handle available");
-            // }
+                match agent_handle.prompt(request).await {
+                    Ok(_) => {
+                        log::info!("Prompt sent successfully to session: {}", session_id);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to send prompt to session {}: {}", session_id, e);
+                    }
+                }
+            } else {
+                log::error!("No agent handle available");
+            }
         })
         .detach();
     }
@@ -1437,7 +849,7 @@ impl Render for ConversationPanel {
                     children = children.child(entity.clone());
                 }
                 RenderedItem::AgentMessage(id, data) => {
-                    let msg = AgentMessage::new(Self::get_id(id), data.clone());
+                    let msg = AgentMessage::new(get_element_id(id), data.clone());
                     children = children.child(msg);
                 }
                 RenderedItem::AgentThought(text) => {

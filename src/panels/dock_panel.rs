@@ -229,7 +229,7 @@ impl DockPanelContainer {
         let story_klass = ToolCallDetailPanel::klass();
         story.set_tool_call(tool_call);
 
-        let entity = cx.new(|cx| story);
+        let entity = cx.new(|_cx| story);
 
         let view = cx.new(|cx| {
             let mut container = Self::new(cx)

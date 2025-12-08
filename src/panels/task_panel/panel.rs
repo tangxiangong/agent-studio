@@ -18,7 +18,6 @@ use gpui_component::{
     scroll::ScrollableElement as _,
     v_flex, ActiveTheme, Icon, IconName, Selectable, Sizable, StyledExt,
 };
-use rand::Rng;
 use std::rc::Rc;
 
 use crate::core::event_bus::WorkspaceUpdateEvent;
@@ -62,7 +61,6 @@ pub struct TaskPanel {
     selected_task_id: Option<String>,
     view_mode: ViewMode,
     _subscriptions: Vec<Subscription>,
-    use_real_data: bool,
     /// Search input state
     search_input: Entity<InputState>,
     /// Shared callback for removing workspace from dropdown menu
@@ -152,7 +150,7 @@ impl TaskPanel {
             Self::load_workspace_data(&entity, workspace_service.clone(), cx);
             Self::subscribe_to_workspace_updates(&entity, cx);
         } else {
-            Self::load_random_data(&entity, cx);
+            log::warn!("WorkspaceService not available, TaskPanel will remain empty");
         }
 
         entity
@@ -183,7 +181,6 @@ impl TaskPanel {
             selected_task_id: None,
             view_mode: ViewMode::Tree,
             _subscriptions: vec![search_subscription],
-            use_real_data: false,
             search_input,
             remove_workspace_callback,
             remove_task_callback,
@@ -206,7 +203,6 @@ impl TaskPanel {
 
             cx.update(|cx| {
                 entity_clone.update(cx, |this, cx| {
-                    this.use_real_data = true;
                     this.workspaces = workspaces_list
                         .into_iter()
                         .map(|ws| {
@@ -268,107 +264,12 @@ impl TaskPanel {
             });
     }
 
-    fn load_random_data(entity: &Entity<Self>, cx: &mut App) {
-        let workspaces = Self::generate_random_workspaces();
-        entity.update(cx, |this, cx| {
-            this.use_real_data = false;
-            this.workspaces = workspaces;
-            this.select_first_task();
-            cx.notify();
-        });
-    }
-
     fn select_first_task(&mut self) {
         if let Some(first_workspace) = self.workspaces.first() {
             if let Some(first_task) = first_workspace.tasks.first() {
                 self.selected_task_id = Some(first_task.id.clone());
             }
         }
-    }
-
-    fn generate_random_workspaces() -> Vec<WorkspaceGroup> {
-        let mut rng = rand::thread_rng();
-
-        let workspace_names = [
-            "conductor",
-            "melty_home",
-            "swipe",
-            "conductor-docs",
-            "conductor_api",
-            "chorus",
-            "api",
-            "metarquiz-2",
-        ];
-
-        let task_modes = ["Auto", "Ask", "Plan", "Code", "Explain"];
-        let agent_names = ["claude", "gpt-4", "gemini", "copilot"];
-        let sample_messages = [
-            "Implement user authentication",
-            "Fix layout issue on mobile",
-            "Add dark mode support",
-            "Refactor database queries",
-            "Write unit tests",
-            "Update documentation",
-            "Optimize performance",
-            "Add error handling",
-        ];
-
-        workspace_names
-            .iter()
-            .enumerate()
-            .map(|(idx, name)| {
-                let task_count = if idx < 2 { rng.gen_range(2..4) } else { 0 };
-                let tasks: Vec<_> = (0..task_count)
-                    .map(|i| {
-                        let workspace_id = format!("ws-{}", idx);
-                        let task_name =
-                            sample_messages[rng.gen_range(0..sample_messages.len())].to_string();
-                        let agent_name =
-                            agent_names[rng.gen_range(0..agent_names.len())].to_string();
-                        let mode = task_modes[rng.gen_range(0..task_modes.len())].to_string();
-
-                        let mut task =
-                            WorkspaceTask::new(workspace_id.clone(), task_name, agent_name, mode);
-
-                        task.status = match rng.gen_range(0..4) {
-                            0 => TaskStatus::Pending,
-                            1 => TaskStatus::InProgress,
-                            2 => TaskStatus::Completed,
-                            _ => TaskStatus::Failed,
-                        };
-
-                        if task.status == TaskStatus::InProgress {
-                            task.session_id = Some(format!("session-{}-{}", idx, i));
-                        }
-
-                        if rng.gen_bool(0.7) {
-                            let messages = [
-                                "Working on it...",
-                                "Almost done",
-                                "Need more information",
-                                "Completed successfully",
-                                "Encountered an error",
-                            ];
-                            task.last_message = Some(SharedString::from(
-                                messages[rng.gen_range(0..messages.len())],
-                            ));
-                        }
-
-                        let days_ago = rng.gen_range(0..30);
-                        task.created_at = chrono::Utc::now() - chrono::Duration::days(days_ago);
-
-                        Rc::new(task)
-                    })
-                    .collect();
-
-                WorkspaceGroup {
-                    id: format!("ws-{}", idx),
-                    name: name.to_string(),
-                    is_expanded: idx < 2,
-                    tasks,
-                }
-            })
-            .collect()
     }
 
     // ========================================================================

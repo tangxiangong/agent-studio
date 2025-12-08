@@ -477,7 +477,7 @@ impl SettingsPanel {
                             "Check for Updates",
                             SettingField::render({
                                 let view = view.clone();
-                                move |options, window, _cx| {
+                                move |options, _window, _cx| {
                                     Button::new("check-updates")
                                         .icon(IconName::LoaderCircle)
                                         .label("Check Now")

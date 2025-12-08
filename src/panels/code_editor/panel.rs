@@ -386,7 +386,7 @@ impl CodeEditorPanel {
             }))
     }
 
-    fn render_go_to_line_button(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_go_to_line_button(&self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let position = self.editor.read(cx).cursor_position();
         let cursor = self.editor.read(cx).cursor();
 
@@ -447,7 +447,7 @@ impl CodeEditorPanel {
 
     fn add_selection_to_chat(
         &self,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
         selection: (Position, Position),
     ) {

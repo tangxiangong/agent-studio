@@ -56,8 +56,8 @@ impl AppTitleBar {
     fn on_action_open_settings(
         &mut self,
         _: &OpenSettings,
-        window: &mut Window,
-        cx: &mut Context<Self>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
     ) {
         // SettingsWindow::open(window, cx).detach();
     }

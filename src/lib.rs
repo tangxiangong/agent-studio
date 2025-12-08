@@ -5,7 +5,6 @@ mod core;
 mod i18n;
 mod panels;
 mod schemas;
-mod task_data;
 mod utils;
 pub mod workspace;
 pub use app::key_binding;

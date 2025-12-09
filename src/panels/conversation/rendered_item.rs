@@ -26,7 +26,7 @@ pub enum RenderedItem {
 impl RenderedItem {
     /// Try to append an AgentMessageChunk to this item (returns true if successful)
     pub fn try_append_agent_message_chunk(&mut self, chunk: ContentChunk) -> bool {
-        if let RenderedItem::AgentMessage(_id, ref mut data) = self {
+        if let RenderedItem::AgentMessage(_id, data) = self {
             data.chunks.push(chunk);
             true
         } else {
@@ -36,7 +36,7 @@ impl RenderedItem {
 
     /// Try to append an AgentThoughtChunk to this item (returns true if successful)
     pub fn try_append_agent_thought_chunk(&mut self, text: String) -> bool {
-        if let RenderedItem::AgentThought(ref mut existing_text) = self {
+        if let RenderedItem::AgentThought(existing_text) = self {
             existing_text.push_str(&text);
             true
         } else {
@@ -46,7 +46,7 @@ impl RenderedItem {
 
     /// Mark an AgentMessage as complete (no more chunks expected)
     pub fn mark_complete(&mut self) {
-        if let RenderedItem::AgentMessage(_id, ref mut data) = self {
+        if let RenderedItem::AgentMessage(_id, data) = self {
             data.meta.is_complete = true;
         }
     }

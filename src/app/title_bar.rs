@@ -34,7 +34,7 @@ impl AppTitleBar {
         app_menus::init(title, cx);
 
         let font_size_selector = cx.new(|cx| FontSizeSelector::new(window, cx));
-        let app_menu_bar = AppMenuBar::new(window, cx);
+        let app_menu_bar = AppMenuBar::new(cx);
 
         Self {
             app_menu_bar,

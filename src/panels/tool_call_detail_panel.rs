@@ -1,7 +1,7 @@
+use std::any;
+
 use gpui::{
-    div, prelude::*, px, App, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, ScrollHandle, SharedString, StatefulInteractiveElement,
-    Styled, Window,
+    AnyElement, App, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Window, div, prelude::*, px
 };
 use gpui_component::{h_flex, text::TextView, v_flex, ActiveTheme, Icon, IconName};
 
@@ -83,7 +83,7 @@ impl ToolCallDetailPanel {
         content: &ToolCallContent,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> AnyElement {
         match content {
             ToolCallContent::Content(c) => match &c.content {
                 ContentBlock::Text(text) => {

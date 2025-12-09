@@ -626,6 +626,7 @@ impl WelcomePanel {
                                             gpui::ImageFormat::Svg => "image/svg+xml",
                                             gpui::ImageFormat::Bmp => "image/bmp",
                                             gpui::ImageFormat::Tiff => "image/tiff",
+                                            gpui::ImageFormat::Ico => "image/icon",
                                         }
                                         .to_string();
 

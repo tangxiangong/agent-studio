@@ -1,5 +1,5 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "agentx"
 description = "An Agent Studio"
 publish = false
@@ -19,7 +19,7 @@ tree-sitter-navi = "0.2.2"
 smol.workspace = true
 color-lsp = "0.2.0"
 lsp-types.workspace = true
-reqwest_client = { path = "../crates/reqwest_client" }
+reqwest_client = { path = "../../crates/reqwest_client" }
 
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }

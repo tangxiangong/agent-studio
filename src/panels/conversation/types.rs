@@ -52,7 +52,7 @@ pub fn extract_filename(uri: &str) -> String {
 }
 
 pub fn get_file_icon(mime_type: &Option<String>) -> IconName {
-    if let Some(ref mime) = mime_type {
+    if let Some(mime) = mime_type {
         if mime.contains("python")
             || mime.contains("javascript")
             || mime.contains("typescript")

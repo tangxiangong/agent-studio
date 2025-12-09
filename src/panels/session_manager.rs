@@ -65,7 +65,8 @@ impl SessionManagerPanel {
             }
         };
 
-        cx.spawn(|mut this, mut cx: async_watch::AsyncWindowContext| async move {
+        let weak_self = cx.entity().downgrade();
+        cx.spawn(async move |_entity, mut cx| {
             // Get all agents
             let agents = agent_service.list_agents().await;
 
@@ -78,12 +79,14 @@ impl SessionManagerPanel {
                 }
             }
 
-            cx.update(|cx| {
-                this.update(cx, |this, cx| {
-                    this.sessions_by_agent = sessions_by_agent;
-                    cx.notify();
-                })
-            })
+            _ = cx.update(|cx| {
+                if let Some(this) = weak_self.upgrade() {
+                    this.update(cx, |this, cx| {
+                        this.sessions_by_agent = sessions_by_agent;
+                        cx.notify();
+                    });
+                }
+            });
         })
         .detach();
     }

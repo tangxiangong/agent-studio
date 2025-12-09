@@ -291,3 +291,77 @@ pub struct SwitchTheme(pub SharedString);
 #[derive(Action, Clone, PartialEq)]
 #[action(namespace = themes, no_json)]
 pub struct SwitchThemeMode(pub ThemeMode);
+
+// ============================================================================
+// Agent Configuration Actions - Agent 配置相关操作
+// ============================================================================
+
+/// 添加新的 Agent
+///
+/// 在配置中添加一个新的 agent，包含命令、参数和环境变量
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = agent_config, no_json)]
+pub struct AddAgent {
+    /// Agent name / Agent 名称
+    pub name: String,
+    /// Command to execute / 执行的命令
+    pub command: String,
+    /// Command arguments / 命令参数
+    pub args: Vec<String>,
+    /// Environment variables / 环境变量
+    pub env: std::collections::HashMap<String, String>,
+}
+
+/// 更新现有 Agent 的配置
+///
+/// 修改指定 agent 的配置并重启该 agent 进程
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = agent_config, no_json)]
+pub struct UpdateAgent {
+    /// Agent name / Agent 名称
+    pub name: String,
+    /// Command to execute / 执行的命令
+    pub command: String,
+    /// Command arguments / 命令参数
+    pub args: Vec<String>,
+    /// Environment variables / 环境变量
+    pub env: std::collections::HashMap<String, String>,
+}
+
+/// 移除 Agent
+///
+/// 从配置中删除指定的 agent 并关闭其进程
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = agent_config, no_json)]
+pub struct RemoveAgent {
+    /// Agent name to remove / 要移除的 Agent 名称
+    pub name: String,
+}
+
+/// 重启 Agent
+///
+/// 使用当前配置重启指定的 agent 进程
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = agent_config, no_json)]
+pub struct RestartAgent {
+    /// Agent name to restart / 要重启的 Agent 名称
+    pub name: String,
+}
+
+/// 重新加载 Agent 配置
+///
+/// 从 config.json 文件重新加载所有 agent 配置
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = agent_config, no_json)]
+pub struct ReloadAgentConfig;
+
+/// 设置上传目录
+///
+/// 修改全局上传目录配置
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = agent_config, no_json)]
+pub struct SetUploadDir {
+    /// Upload directory path / 上传目录路径
+    pub path: std::path::PathBuf,
+}
+

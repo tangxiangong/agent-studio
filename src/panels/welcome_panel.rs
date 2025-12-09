@@ -171,6 +171,36 @@ impl WelcomePanel {
             cx,
         );
 
+        // Subscribe to AgentConfigBus for dynamic agent list updates
+        {
+            let agent_config_bus = AppState::global(cx).agent_config_bus.clone();
+            let weak_entity = entity.downgrade();
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+            // Subscribe to bus
+            log::info!("[WelcomePanel] Subscribing to AgentConfigBus");
+            agent_config_bus.subscribe(move |event| {
+                log::debug!("[WelcomePanel] Received agent config event");
+                let _ = tx.send(event.clone());
+            });
+
+            // Spawn background task to process events
+            cx.spawn(async move |cx| {
+                while let Some(event) = rx.recv().await {
+                    if let Some(entity) = weak_entity.upgrade() {
+                        _ = cx.update(|cx| {
+                            entity.update(cx, |this, cx| {
+                                this.on_agent_config_event(&event, cx);
+                            });
+                        });
+                    } else {
+                        break;
+                    }
+                }
+            })
+            .detach();
+        }
+
         // Subscribe to agent_select focus to refresh agents list when no agents available
         entity.update(cx, |this, cx| {
             let agent_select_focus = this.agent_select.focus_handle(cx);
@@ -327,28 +357,73 @@ impl WelcomePanel {
         };
 
         let agent_select = self.agent_select.clone();
-        cx.spawn(|mut this, mut cx: async_watch::AsyncWindowContext| async move {
+        let weak_self = cx.entity().downgrade();
+        cx.spawn_in(window, async move |_this, window| {
             let agents = agent_service.list_agents().await;
 
             if agents.is_empty() {
-                return Ok(());
+                return;
             }
 
-            cx.update(|cx| {
-                this.update(cx, |this, cx| {
-                    // We now have agents, update the select
-                    this.has_agents = true;
-                    let agents_clone = agents.clone();
-                    let window_handle = cx.window_handle();
-                    agent_select.update(cx, |state, cx| {
-                        state.set_items(agents_clone, window_handle.root(cx), cx);
-                        state.set_selected_index(Some(IndexPath::default()), window_handle.root(cx), cx);
+            _ = window.update(|window, cx| {
+                if let Some(this) = weak_self.upgrade() {
+                    this.update(cx, |this, cx| {
+                        // We now have agents, update the select
+                        this.has_agents = true;
+                        let agents_clone = agents.clone();
+                        agent_select.update(cx, |state, cx| {
+                            state.set_items(agents_clone, window, cx);
+                            state.set_selected_index(Some(IndexPath::default()), window, cx);
+                        });
+                        cx.notify();
                     });
-                    cx.notify();
-                })
-            })
+                }
+            });
         })
         .detach();
+    }
+
+    /// Handle agent configuration events (add/remove/reload)
+    fn on_agent_config_event(
+        &mut self,
+        event: &crate::core::event_bus::agent_config_bus::AgentConfigEvent,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::core::event_bus::agent_config_bus::AgentConfigEvent;
+
+        log::info!("[WelcomePanel] Received agent config event: {:?}", event);
+
+        match event {
+            AgentConfigEvent::AgentAdded { name, .. } => {
+                log::info!("[WelcomePanel] Agent added: {}", name);
+                // Force refresh to include new agent
+                self.has_agents = false;
+            }
+            AgentConfigEvent::AgentRemoved { name } => {
+                log::info!("[WelcomePanel] Agent removed: {}", name);
+                // Check if the removed agent was selected
+                let selected_agent = self.agent_select.read(cx).selected_value().cloned();
+                if let Some(selected) = selected_agent {
+                    if &selected == name {
+                        // Clear current selection
+                        self.has_agents = false;
+                    }
+                }
+                // Force refresh to remove deleted agent
+                self.has_agents = false;
+            }
+            AgentConfigEvent::AgentUpdated { name, .. } => {
+                log::info!("[WelcomePanel] Agent updated: {}", name);
+                // No action needed - agent name hasn't changed
+            }
+            AgentConfigEvent::AgentConfigReloaded { .. } => {
+                log::info!("[WelcomePanel] Agent config reloaded");
+                // Force full refresh
+                self.has_agents = false;
+            }
+        }
+
+        cx.notify();
     }
 
     /// Handle agent selection change - refresh sessions for the newly selected agent

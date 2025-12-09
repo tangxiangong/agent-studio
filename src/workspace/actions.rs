@@ -5,7 +5,10 @@ use rand;
 use std::sync::Arc;
 
 use crate::{
-    app::actions::{Paste, Submit},
+    app::actions::{
+        AddAgent, Paste, ReloadAgentConfig, RemoveAgent, RestartAgent, SetUploadDir, Submit,
+        UpdateAgent,
+    },
     panels::{dock_panel::DockPanelContainer, DockPanel},
     title_bar::OpenSettings,
     utils, AddPanel, AppState, ConversationPanel, CreateTaskFromWelcome,
@@ -590,3 +593,167 @@ impl DockWorkspace {
         .detach();
     }
 }
+
+// ============================================================================
+// Agent Configuration Action Handlers
+// ============================================================================
+
+pub fn add_agent(action: &AddAgent, _window: &mut Window, cx: &mut App) {
+    let agent_config_service = match AppState::global(cx).agent_config_service() {
+        Some(service) => service.clone(),
+        None => {
+            log::error!("AgentConfigService not initialized");
+            return;
+        }
+    };
+
+    let name = action.name.clone();
+    let config = crate::core::config::AgentProcessConfig {
+        command: action.command.clone(),
+        args: action.args.clone(),
+        env: action.env.clone(),
+    };
+
+    smol::spawn(async move {
+        match agent_config_service.add_agent(name.clone(), config).await {
+            Ok(()) => {
+                log::info!("Successfully added agent: {}", name);
+            }
+            Err(e) => {
+                log::error!("Failed to add agent '{}': {}", name, e);
+            }
+        }
+    })
+    .detach();
+}
+
+pub fn update_agent(action: &UpdateAgent, _window: &mut Window, cx: &mut App) {
+    let agent_config_service = match AppState::global(cx).agent_config_service() {
+        Some(service) => service.clone(),
+        None => {
+            log::error!("AgentConfigService not initialized");
+            return;
+        }
+    };
+
+    let name = action.name.clone();
+    let config = crate::core::config::AgentProcessConfig {
+        command: action.command.clone(),
+        args: action.args.clone(),
+        env: action.env.clone(),
+    };
+
+    smol::spawn(async move {
+        match agent_config_service.update_agent(&name, config).await {
+            Ok(()) => {
+                log::info!("Successfully updated agent: {}", name);
+            }
+            Err(e) => {
+                log::error!("Failed to update agent '{}': {}", name, e);
+            }
+        }
+    })
+    .detach();
+}
+
+pub fn remove_agent(action: &RemoveAgent, _window: &mut Window, cx: &mut App) {
+    let agent_config_service = match AppState::global(cx).agent_config_service() {
+        Some(service) => service.clone(),
+        None => {
+            log::error!("AgentConfigService not initialized");
+            return;
+        }
+    };
+
+    let name = action.name.clone();
+
+    smol::spawn(async move {
+        // Check if agent has active sessions
+        if agent_config_service.has_active_sessions(&name).await {
+            log::warn!("Agent '{}' has active sessions. User should confirm removal.", name);
+            // In a full implementation, we'd show a confirmation dialog here
+            // For now, we'll proceed with removal
+        }
+
+        match agent_config_service.remove_agent(&name).await {
+            Ok(()) => {
+                log::info!("Successfully removed agent: {}", name);
+            }
+            Err(e) => {
+                log::error!("Failed to remove agent '{}': {}", name, e);
+            }
+        }
+    })
+    .detach();
+}
+
+pub fn restart_agent(action: &RestartAgent, _window: &mut Window, cx: &mut App) {
+    let agent_config_service = match AppState::global(cx).agent_config_service() {
+        Some(service) => service.clone(),
+        None => {
+            log::error!("AgentConfigService not initialized");
+            return;
+        }
+    };
+
+    let name = action.name.clone();
+
+    smol::spawn(async move {
+        match agent_config_service.restart_agent(&name).await {
+            Ok(()) => {
+                log::info!("Successfully restarted agent: {}", name);
+            }
+            Err(e) => {
+                log::error!("Failed to restart agent '{}': {}", name, e);
+            }
+        }
+    })
+    .detach();
+}
+
+pub fn reload_agent_config(_action: &ReloadAgentConfig, _window: &mut Window, cx: &mut App) {
+    let agent_config_service = match AppState::global(cx).agent_config_service() {
+        Some(service) => service.clone(),
+        None => {
+            log::error!("AgentConfigService not initialized");
+            return;
+        }
+    };
+
+    smol::spawn(async move {
+        match agent_config_service.reload_from_file().await {
+            Ok(()) => {
+                log::info!("Successfully reloaded agent configuration");
+            }
+            Err(e) => {
+                log::error!("Failed to reload agent configuration: {}", e);
+            }
+        }
+    })
+    .detach();
+}
+
+pub fn set_upload_dir(action: &SetUploadDir, _window: &mut Window, cx: &mut App) {
+    let agent_config_service = match AppState::global(cx).agent_config_service() {
+        Some(service) => service.clone(),
+        None => {
+            log::error!("AgentConfigService not initialized");
+            return;
+        }
+    };
+
+    let path = action.path.clone();
+
+    smol::spawn(async move {
+        match agent_config_service.set_upload_dir(path.clone()).await {
+            Ok(()) => {
+                log::info!("Successfully set upload directory to: {:?}", path);
+            }
+            Err(e) => {
+                log::error!("Failed to set upload directory: {}", e);
+            }
+        }
+    })
+    .detach();
+}
+

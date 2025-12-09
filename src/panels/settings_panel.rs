@@ -16,7 +16,11 @@ use gpui_component::{
     v_flex, ActiveTheme, Icon, IconName, Sizable, Size, Theme, ThemeMode,
 };
 
-use crate::core::updater::{UpdateCheckResult, UpdateManager, Version};
+use crate::{
+    core::{config::AgentProcessConfig, updater::{UpdateCheckResult, UpdateManager, Version}},
+    AppState,
+};
+use std::collections::HashMap;
 
 struct AppSettings {
     auto_switch_theme: bool,
@@ -75,6 +79,9 @@ pub struct SettingsPanel {
     size: Size,
     update_status: UpdateStatus,
     update_manager: UpdateManager,
+    // Agent configuration state
+    agent_configs: HashMap<String, AgentProcessConfig>,
+    upload_dir: String,
 }
 
 struct OpenURLSettingField {
@@ -131,12 +138,19 @@ impl SettingsPanel {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.set_global::<AppSettings>(AppSettings::default());
 
+        // Initialize with empty state - will be loaded async
+        // Agent configs will be loaded when the page is rendered
+        let agent_configs = HashMap::new();
+        let upload_dir = String::new();
+
         Self {
             focus_handle: cx.focus_handle(),
             group_variant: GroupBoxVariant::Outline,
             size: Size::default(),
             update_status: UpdateStatus::Idle,
             update_manager: UpdateManager::default(),
+            agent_configs,
+            upload_dir,
         }
     }
 
@@ -550,6 +564,112 @@ impl SettingsPanel {
                         )
                         .description("How often to automatically check for updates (in days)."),
                     ]),
+                ]),
+            // Agent Servers Page
+            SettingPage::new("Agent Servers")
+                .resettable(false)
+                .groups(vec![
+                    SettingGroup::new()
+                        .title("Configuration")
+                        .item(
+                            SettingItem::new(
+                                "Upload Directory",
+                                SettingField::render({
+                                    let view = view.clone();
+                                    move |_options, _window, cx| {
+                                        let upload_dir = view.read(cx).upload_dir.clone();
+                                        let display = if upload_dir.is_empty() {
+                                            "Not configured".to_string()
+                                        } else {
+                                            upload_dir
+                                        };
+
+                                        gpui::div()
+                                            .child(
+                                                Label::new(display)
+                                                    .text_sm()
+                                                    .text_color(cx.theme().muted_foreground)
+                                            )
+                                            .into_any()
+                                    }
+                                }),
+                            )
+                            .description("Directory for uploaded files (edit via config.json)"),
+                        ),
+                    SettingGroup::new()
+                        .title("Configured Agents")
+                        .item(SettingItem::render({
+                            let view = view.clone();
+                            move |_options, _window, cx| {
+                                let agent_configs = view.read(cx).agent_configs.clone();
+
+                                if agent_configs.is_empty() {
+                                    return v_flex()
+                                        .w_full()
+                                        .p_4()
+                                        .items_center()
+                                        .child(
+                                            Label::new("No agents configured. Please edit config.json to add agents.")
+                                                .text_sm()
+                                                .text_color(cx.theme().muted_foreground)
+                                        )
+                                        .into_any();
+                                }
+
+                                v_flex()
+                                    .w_full()
+                                    .gap_2()
+                                    .children(agent_configs.iter().enumerate().map(|(idx, (name, config))| {
+                                        let mut details = v_flex()
+                                            .gap_1()
+                                            .child(
+                                                Label::new(name.clone())
+                                                    .text_sm()
+                                            )
+                                            .child(
+                                                Label::new(format!("Command: {}", config.command))
+                                                    .text_xs()
+                                                    .text_color(cx.theme().muted_foreground)
+                                            );
+
+                                        // Add args if not empty
+                                        if !config.args.is_empty() {
+                                            details = details.child(
+                                                Label::new(format!("Args: {}", config.args.join(" ")))
+                                                    .text_xs()
+                                                    .text_color(cx.theme().muted_foreground)
+                                            );
+                                        }
+
+                                        h_flex()
+                                            .w_full()
+                                            .items_center()
+                                            .justify_between()
+                                            .p_2()
+                                            .rounded(px(4.))
+                                            .bg(cx.theme().secondary)
+                                            .child(details)
+                                            .child(
+                                                Label::new(format!("Agent {}/{}", idx + 1, agent_configs.len()))
+                                                    .text_xs()
+                                                    .text_color(cx.theme().muted_foreground)
+                                            )
+                                    }))
+                                    .child(
+                                        h_flex()
+                                            .w_full()
+                                            .justify_center()
+                                            .p_2()
+                                            .mt_2()
+                                            .child(
+                                                Label::new("Note: Agent management via UI coming soon. Currently managed through config.json")
+                                                    .text_xs()
+                                                    .text_color(cx.theme().muted_foreground)
+                                            )
+                                    )
+                                    .into_any()
+                            }
+                        })),
                 ]),
             SettingPage::new("About")
                 .resettable(resettable)

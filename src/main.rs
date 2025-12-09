@@ -64,7 +64,10 @@ fn main() {
 
                     // Store in global AppState
                     let init_result = cx.update(|cx| {
-                        agentx::AppState::global_mut(cx).set_agent_manager(manager);
+                        // Set config path first
+                        agentx::AppState::global_mut(cx).set_config_path(settings.config_path.clone());
+                        // Then set agent manager with config
+                        agentx::AppState::global_mut(cx).set_agent_manager(manager, config);
                         agentx::AppState::global_mut(cx).set_permission_store(permission_store);
 
                         // Get message service for persistence initialization

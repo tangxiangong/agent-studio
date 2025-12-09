@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf};
 pub struct Settings {
     pub config_path: PathBuf,
@@ -24,7 +24,7 @@ impl Settings {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub agent_servers: HashMap<String, AgentProcessConfig>,
     #[serde(default = "default_upload_dir")]
@@ -35,7 +35,7 @@ fn default_upload_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AgentProcessConfig {
     pub command: String,
     #[serde(default)]

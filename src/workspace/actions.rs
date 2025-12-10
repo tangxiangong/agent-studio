@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::{
     app::actions::{
-        AddAgent, Paste, ReloadAgentConfig, RemoveAgent, RestartAgent, SetUploadDir, Submit,
+        AddAgent, CancelSession, Paste, ReloadAgentConfig, RemoveAgent, RestartAgent, SetUploadDir, Submit,
         UpdateAgent,
     },
     panels::{dock_panel::DockPanelContainer, DockPanel},
@@ -588,6 +588,50 @@ impl DockWorkspace {
                 }
             } else {
                 log::error!("No agent handle available");
+            }
+        })
+        .detach();
+    }
+
+    /// Handle CancelSession action - cancel an ongoing session operation
+    pub(super) fn on_action_cancel_session(
+        &mut self,
+        action: &CancelSession,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let session_id = action.session_id.clone();
+
+        log::info!("Cancelling session: {}", session_id);
+
+        // Spawn async task to cancel the session
+        cx.spawn(async move |_this, cx| {
+            // Get AgentService to find which agent owns this session
+            let agent_service = cx
+                .update(|cx| AppState::global(cx).agent_service().cloned())
+                .ok()
+                .flatten();
+
+            if let Some(agent_service) = agent_service {
+                // List all sessions to find the agent name
+                let sessions = agent_service.list_sessions();
+                if let Some(session_info) = sessions.iter().find(|s| s.session_id == session_id) {
+                    let agent_name = session_info.agent_name.clone();
+
+                    // Cancel the session
+                    match agent_service.cancel_session(&agent_name, &session_id).await {
+                        Ok(()) => {
+                            log::info!("Session {} cancelled successfully", session_id);
+                        }
+                        Err(e) => {
+                            log::error!("Failed to cancel session {}: {}", session_id, e);
+                        }
+                    }
+                } else {
+                    log::error!("Session {} not found", session_id);
+                }
+            } else {
+                log::error!("AgentService not available");
             }
         })
         .detach();

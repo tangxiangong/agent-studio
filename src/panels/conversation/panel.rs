@@ -1138,6 +1138,7 @@ impl Render for ConversationPanel {
                             .pasted_images(self.pasted_images.clone())
                             .code_selections(self.code_selections.clone())
                             .session_status(self.session_status.as_ref().map(|info| info.status.clone()))
+                            .session_id(self.session_id.clone())
                             .on_paste(move |window, cx| {
                                 entity.update(cx, |this, cx| {
                                     this.handle_paste(window, cx);

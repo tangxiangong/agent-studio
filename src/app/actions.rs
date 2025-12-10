@@ -153,6 +153,17 @@ pub struct SendMessageToSession {
     /// 附带的图片列表 (ImageContent, filename)
     pub images: Vec<(ImageContent, String)>,
 }
+
+/// 取消会话
+///
+/// 用于取消正在进行中的会话，由 ConversationPanel 的暂停按钮触发
+/// 实际的 Agent 取消逻辑在 workspace/actions.rs 中实现
+#[derive(Action, Clone, Debug, PartialEq, Deserialize)]
+#[action(namespace = agentx, no_json)]
+pub struct CancelSession {
+    /// 会话唯一标识符
+    pub session_id: String,
+}
 /// 显示会话对话面板
 ///
 #[derive(Action, Clone, PartialEq, Deserialize)]

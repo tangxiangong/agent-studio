@@ -16,7 +16,7 @@ use gpui_component::{
 
 use agent_client_protocol::ImageContent;
 
-use crate::app::actions::AddCodeSelection;
+use crate::app::actions::{AddCodeSelection, CancelSession};
 use crate::core::services::SessionStatus;
 
 /// A reusable chat input component with context controls and send button.
@@ -48,6 +48,7 @@ pub struct ChatInputBox {
     on_remove_code_selection: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
     on_paste: Option<Rc<dyn Fn(&mut Window, &mut App) + 'static>>,
     session_status: Option<SessionStatus>,      // Session status for button state
+    session_id: Option<String>,                 // Session ID for cancel action
 }
 
 impl ChatInputBox {
@@ -72,6 +73,7 @@ impl ChatInputBox {
             on_remove_code_selection: None,
             on_paste: None,
             session_status: None,
+            session_id: None,
         }
     }
 
@@ -185,6 +187,12 @@ impl ChatInputBox {
     /// Set the session status (affects send button appearance)
     pub fn session_status(mut self, status: Option<SessionStatus>) -> Self {
         self.session_status = status;
+        self
+    }
+
+    /// Set the session ID (required for cancel action)
+    pub fn session_id(mut self, session_id: Option<String>) -> Self {
+        self.session_id = session_id;
         self
     }
 }
@@ -467,7 +475,7 @@ impl RenderOnce for ChatInputBox {
                                 let (icon, is_in_progress) = match self.session_status {
                                     Some(SessionStatus::InProgress) => {
                                         (Icon::new(crate::assets::Icon::SquarePause), true)
-                                    }, 
+                                    },
                                     _ => (Icon::new(IconName::ArrowUp), false),
                                 };
 
@@ -475,10 +483,10 @@ impl RenderOnce for ChatInputBox {
                                     .icon(icon)
                                     .rounded_full()
                                     .small()
-                                    .disabled(is_empty);
+                                    .disabled(is_empty && !is_in_progress);
 
                                 // Set button colors based on state
-                                if is_empty {
+                                if is_empty && !is_in_progress {
                                     // Disabled state: lighter/muted color
                                     btn = btn.custom(
                                         ButtonCustomVariant::new(cx)
@@ -503,7 +511,22 @@ impl RenderOnce for ChatInputBox {
                                     );
                                 }
 
-                                if let Some(handler) = on_send {
+                                // Handle button click
+                                if is_in_progress {
+                                    // When in progress, dispatch CancelSession action
+                                    if let Some(session_id) = self.session_id {
+                                        btn = btn.on_click(move |_ev, window, cx| {
+                                            log::info!("Dispatching CancelSession action for session: {}", session_id);
+                                            window.dispatch_action(
+                                                Box::new(CancelSession {
+                                                    session_id: session_id.clone(),
+                                                }),
+                                                cx,
+                                            );
+                                        });
+                                    }
+                                } else if let Some(handler) = on_send {
+                                    // Normal send behavior
                                     btn = btn.on_click(move |ev, window, cx| {
                                         handler(ev, window, cx);
                                     });

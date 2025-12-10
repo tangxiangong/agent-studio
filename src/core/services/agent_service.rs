@@ -135,6 +135,26 @@ impl AgentService {
         Ok(())
     }
 
+    /// Cancel an ongoing session operation
+    pub async fn cancel_session(&self, agent_name: &str, session_id: &str) -> Result<()> {
+        // Get the agent handle
+        let agent_handle = self.get_agent_handle(agent_name).await?;
+
+        // Send cancel request to the agent
+        agent_handle.cancel(session_id.to_string()).await?;
+
+        // Update session status to Idle
+        let mut sessions = self.sessions.write().unwrap();
+        if let Some(agent_sessions) = sessions.get_mut(agent_name) {
+            if let Some(info) = agent_sessions.get_mut(session_id) {
+                info.status = SessionStatus::Idle;
+                log::info!("Cancelled session {} for agent {}", session_id, agent_name);
+            }
+        }
+
+        Ok(())
+    }
+
     /// List all sessions
     pub fn list_sessions(&self) -> Vec<AgentSessionInfo> {
         self.sessions

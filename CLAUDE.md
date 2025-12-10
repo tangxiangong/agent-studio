@@ -41,7 +41,7 @@ src/
 │   ├── dock_panel.rs     # DockPanel trait and container
 │   ├── code_editor.rs    # Code editor with LSP
 │   ├── conversation.rs   # Mock conversation panel
-│   ├── conversation_acp/ # ACP-enabled conversation (modularized)
+│   ├── conversation/ # ACP-enabled conversation (modularized)
 │   │   ├── panel.rs      # Main panel logic (1215 lines)
 │   │   ├── types.rs      # Reusable types and traits (94 lines)
 │   │   └── mod.rs        # Module exports

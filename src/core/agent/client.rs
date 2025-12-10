@@ -240,6 +240,21 @@ impl AgentHandle {
         result
     }
 
+    /// Cancel an ongoing session operation
+    pub async fn cancel(&self, session_id: String) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let request = acp::CancelNotification::new(acp::SessionId::from(session_id));
+        self.sender
+            .send(AgentCommand::Cancel {
+                request,
+                respond: tx,
+            })
+            .await
+            .map_err(|_| anyhow!("agent {} is not running", self.name))?;
+        rx.await
+            .map_err(|_| anyhow!("agent {} cancel channel closed", self.name))?
+    }
+
     /// Shutdown the agent gracefully
     pub async fn shutdown(&self) -> Result<()> {
         let (tx, rx) = oneshot::channel();

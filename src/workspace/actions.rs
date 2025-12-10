@@ -614,7 +614,7 @@ pub fn add_agent(action: &AddAgent, cx: &mut App) {
         env: action.env.clone(),
     };
 
-    smol::spawn(async move {
+    let _ = cx.spawn(async move |_cx| {
         match agent_config_service.add_agent(name.clone(), config).await {
             Ok(()) => {
                 log::info!("Successfully added agent: {}", name);
@@ -643,7 +643,7 @@ pub fn update_agent(action: &UpdateAgent, cx: &mut App) {
         env: action.env.clone(),
     };
 
-    smol::spawn(async move {
+    let _ = cx.spawn(async move |_cx| {
         match agent_config_service.update_agent(&name, config).await {
             Ok(()) => {
                 log::info!("Successfully updated agent: {}", name);
@@ -666,8 +666,7 @@ pub fn remove_agent(action: &RemoveAgent, cx: &mut App) {
     };
 
     let name = action.name.clone();
-
-    smol::spawn(async move {
+    let _ = cx.spawn(async move |_cx| {
         // Check if agent has active sessions
         if agent_config_service.has_active_sessions(&name).await {
             log::warn!("Agent '{}' has active sessions. User should confirm removal.", name);
@@ -698,7 +697,7 @@ pub fn restart_agent(action: &RestartAgent, cx: &mut App) {
 
     let name = action.name.clone();
 
-    smol::spawn(async move {
+    let _ = cx.spawn(async move |_cx| {
         match agent_config_service.restart_agent(&name).await {
             Ok(()) => {
                 log::info!("Successfully restarted agent: {}", name);
@@ -720,7 +719,7 @@ pub fn reload_agent_config(_action: &ReloadAgentConfig, cx: &mut App) {
         }
     };
 
-    smol::spawn(async move {
+   let _ = cx.spawn(async move |_cx| {
         match agent_config_service.reload_from_file().await {
             Ok(()) => {
                 log::info!("Successfully reloaded agent configuration");
@@ -744,7 +743,7 @@ pub fn set_upload_dir(action: &SetUploadDir, cx: &mut App) {
 
     let path = action.path.clone();
 
-    smol::spawn(async move {
+    let _ = cx.spawn(async move |_cx| {
         match agent_config_service.set_upload_dir(path.clone()).await {
             Ok(()) => {
                 log::info!("Successfully set upload directory to: {:?}", path);

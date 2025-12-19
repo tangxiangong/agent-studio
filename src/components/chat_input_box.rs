@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, App, ElementId, Entity, Focusable, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, Styled, Window, div, prelude::FluentBuilder, px,
+    RenderOnce, SharedString, Styled, Window, div, prelude::FluentBuilder, px,
 };
 use std::rc::Rc;
 
@@ -11,7 +11,7 @@ use gpui_component::{
     input::{Input, InputState},
     list::{List, ListDelegate, ListState},
     popover::Popover,
-    select::{Select, SelectState},
+    select::{Select, SelectItem, SelectState},
     v_flex,
 };
 
@@ -19,6 +19,51 @@ use agent_client_protocol::ImageContent;
 
 use crate::app::actions::AddCodeSelection;
 use crate::core::services::SessionStatus;
+
+/// An agent item with icon for the select dropdown
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentItem {
+    pub name: String,
+}
+
+impl AgentItem {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+}
+
+impl SelectItem for AgentItem {
+    type Value = String;
+
+    fn title(&self) -> SharedString {
+        self.name.clone().into()
+    }
+
+    fn display_title(&self) -> Option<AnyElement> {
+        let icon = crate::assets::get_agent_icon(&self.name);
+        Some(
+            h_flex()
+                .gap_2()
+                .items_center()
+                .child(Icon::new(icon).xsmall())
+                .child(self.name.clone())
+                .into_any_element(),
+        )
+    }
+
+    fn render(&self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let icon = crate::assets::get_agent_icon(&self.name);
+        h_flex()
+            .gap_2()
+            .items_center()
+            .child(Icon::new(icon).xsmall())
+            .child(self.name.clone())
+    }
+
+    fn value(&self) -> &Self::Value {
+        &self.name
+    }
+}
 
 /// A reusable chat input component with context controls and send button.
 ///
@@ -41,7 +86,7 @@ pub struct ChatInputBox {
     context_popover_open: bool,
     on_context_popover_change: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
     mode_select: Option<Entity<SelectState<Vec<&'static str>>>>,
-    agent_select: Option<Entity<SelectState<Vec<String>>>>,
+    agent_select: Option<Entity<SelectState<Vec<AgentItem>>>>,
     session_select: Option<Entity<SelectState<Vec<String>>>>,
     on_new_session: Option<Box<dyn Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static>>,
     pasted_images: Vec<(ImageContent, String)>, // (ImageContent, filename for display)
@@ -141,7 +186,7 @@ impl ChatInputBox {
     }
 
     /// Set the agent select state
-    pub fn agent_select(mut self, select: Entity<SelectState<Vec<String>>>) -> Self {
+    pub fn agent_select(mut self, select: Entity<SelectState<Vec<AgentItem>>>) -> Self {
         self.agent_select = Some(select);
         self
     }
@@ -495,15 +540,12 @@ impl RenderOnce for ChatInputBox {
                                 h_flex()
                                     .gap_2()
                                     .items_center()
-                                    .child(
-                                        Button::new("attach")
-                                            .icon(Icon::new(IconName::Asterisk))
-                                            .ghost()
-                                            .small(),
-                                    )
                                     .when_some(self.agent_select.clone(), |this, agent_select| {
                                         this.child(
-                                            Select::new(&agent_select).small().appearance(false),
+                                            Select::new(&agent_select)
+                                                .small()
+                                                .appearance(false)
+                                                .w(px(140.)),
                                         )
                                     })
                                     .when_some(
@@ -531,8 +573,8 @@ impl RenderOnce for ChatInputBox {
                                         )
                                     })
                                     .child(
-                                        Button::new("sources")
-                                            .label("All Sources")
+                                        Button::new("mcp")
+                                            .label("mcp")
                                             .icon(Icon::new(IconName::Globe))
                                             .ghost()
                                             .small(),

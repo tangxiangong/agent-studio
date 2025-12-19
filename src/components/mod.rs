@@ -11,7 +11,7 @@ pub use agent_message::{AgentMessage, AgentMessageData, AgentMessageMeta, AgentM
 
 pub use agent_todo_list::{AgentTodoList, AgentTodoListView, PlanMeta};
 
-pub use chat_input_box::ChatInputBox;
+pub use chat_input_box::{AgentItem, ChatInputBox};
 
 pub use file_picker::{FilePickerDelegate, FileItem};
 

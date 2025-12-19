@@ -15,7 +15,7 @@ use agent_client_protocol::ImageContent;
 
 use crate::{
     AppState, CreateTaskFromWelcome, WelcomeSession, app::actions::AddCodeSelection,
-    components::{ChatInputBox, FilePickerDelegate},
+    components::{AgentItem, ChatInputBox, FilePickerDelegate},
 };
 
 // File picker delegate is now imported from components module
@@ -28,7 +28,7 @@ pub struct WelcomePanel {
     context_list: Entity<ListState<FilePickerDelegate>>,
     context_popover_open: bool,
     mode_select: Entity<SelectState<Vec<&'static str>>>,
-    agent_select: Entity<SelectState<Vec<String>>>,
+    agent_select: Entity<SelectState<Vec<AgentItem>>>,
     session_select: Entity<SelectState<Vec<String>>>,
     current_session_id: Option<String>,
     has_agents: bool,
@@ -290,7 +290,7 @@ impl WelcomePanel {
 
         // Get available agents from AppState - we'll load them asynchronously
         // For now, start with placeholder
-        let agent_list = vec!["Loading agents...".to_string()];
+        let agent_list = vec![AgentItem::new("Loading agents...")];
         let agent_select = cx.new(|cx| SelectState::new(agent_list, None, window, cx));
 
         let has_agents = false; // Will be updated after async load
@@ -356,9 +356,12 @@ impl WelcomePanel {
                     this.update(cx, |this, cx| {
                         // We now have agents, update the select
                         this.has_agents = true;
-                        let agents_clone = agents.clone();
+                        let agent_items: Vec<AgentItem> = agents.clone()
+                            .into_iter()
+                            .map(|name| AgentItem::new(name))
+                            .collect();
                         agent_select.update(cx, |state, cx| {
-                            state.set_items(agents_clone, window, cx);
+                            state.set_items(agent_items, window, cx);
                             state.set_selected_index(Some(IndexPath::default()), window, cx);
                         });
                         cx.notify();

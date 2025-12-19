@@ -38,6 +38,7 @@ pub struct WelcomePanel {
     workspace_id: Option<String>,
     pasted_images: Vec<(ImageContent, String)>,
     code_selections: Vec<AddCodeSelection>,
+    selected_files: Vec<String>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -78,7 +79,10 @@ impl WelcomePanel {
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
-        let entity = cx.new(|cx| Self::new(workspace_id.clone(), window, cx));
+        // Create channel for file selection
+        let (file_tx, mut file_rx) = tokio::sync::mpsc::unbounded_channel();
+
+        let entity = cx.new(|cx| Self::new(workspace_id.clone(), Some(file_tx), window, cx));
 
         // Subscribe to CodeSelectionBus using the shared helper function
         crate::core::event_bus::subscribe_entity_to_code_selections(
@@ -154,6 +158,32 @@ impl WelcomePanel {
         // Load workspace info immediately and refresh on each panel creation
         Self::load_workspace_info(&entity, workspace_id.as_deref(), cx);
 
+        // Listen for file selection events
+        {
+            let weak_entity = entity.downgrade();
+            cx.spawn(async move |cx| {
+                while let Some(file_item) = file_rx.recv().await {
+                    if let Some(entity) = weak_entity.upgrade() {
+                        let file_path = file_item.path.to_string_lossy().to_string();
+                        _ = cx.update(|cx| {
+                            entity.update(cx, |this, cx| {
+                                // Add file to selected_files if not already present
+                                if !this.selected_files.contains(&file_path) {
+                                    this.selected_files.push(file_path);
+                                }
+                                // Close the popover
+                                this.context_popover_open = false;
+                                cx.notify();
+                            });
+                        });
+                    } else {
+                        break;
+                    }
+                }
+            })
+            .detach();
+        }
+
         entity
     }
 
@@ -206,7 +236,7 @@ impl WelcomePanel {
         .detach();
     }
 
-    fn new(workspace_id: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(workspace_id: Option<String>, file_tx: Option<tokio::sync::mpsc::UnboundedSender<crate::components::FileItem>>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(2, 8) // Auto-grow from 2 to 8 rows
@@ -216,8 +246,12 @@ impl WelcomePanel {
 
         // Get the current working directory for file picker
         let working_dir = AppState::global(cx).current_working_dir().clone();
+
         let context_list = cx.new(|cx| {
-            let delegate = FilePickerDelegate::new(&working_dir);
+            let mut delegate = FilePickerDelegate::new(&working_dir);
+            if let Some(tx) = file_tx {
+                delegate = delegate.with_selection_sender(tx);
+            }
             ListState::new(delegate, window, cx).searchable(true)
         });
 
@@ -257,6 +291,7 @@ impl WelcomePanel {
             workspace_id,
             pasted_images: Vec::new(),
             code_selections: Vec::new(),
+            selected_files: Vec::new(),
             _subscriptions: Vec::new(),
         };
 
@@ -747,6 +782,14 @@ impl Render for WelcomePanel {
                                     // Remove the code selection at the given index
                                     if *idx < this.code_selections.len() {
                                         this.code_selections.remove(*idx);
+                                        cx.notify();
+                                    }
+                                }))
+                                .selected_files(self.selected_files.clone())
+                                .on_remove_file(cx.listener(|this, idx, _, cx| {
+                                    // Remove the file at the given index
+                                    if *idx < this.selected_files.len() {
+                                        this.selected_files.remove(*idx);
                                         cx.notify();
                                     }
                                 }))

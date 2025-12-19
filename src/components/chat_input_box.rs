@@ -46,8 +46,10 @@ pub struct ChatInputBox {
     on_new_session: Option<Box<dyn Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static>>,
     pasted_images: Vec<(ImageContent, String)>, // (ImageContent, filename for display)
     code_selections: Vec<AddCodeSelection>,     // Code selections from editor
+    selected_files: Vec<String>,                // Selected file paths from file picker
     on_remove_image: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
     on_remove_code_selection: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
+    on_remove_file: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
     on_paste: Option<Rc<dyn Fn(&mut Window, &mut App) + 'static>>,
     session_status: Option<SessionStatus>, // Session status for button state
     session_id: Option<String>,            // Session ID for cancel action
@@ -72,8 +74,10 @@ impl ChatInputBox {
             on_new_session: None,
             pasted_images: Vec::new(),
             code_selections: Vec::new(),
+            selected_files: Vec::new(),
             on_remove_image: None,
             on_remove_code_selection: None,
+            on_remove_file: None,
             on_paste: None,
             session_status: None,
             session_id: None,
@@ -193,6 +197,21 @@ impl ChatInputBox {
         F: Fn(&usize, &mut Window, &mut App) + 'static,
     {
         self.on_remove_code_selection = Some(Rc::new(callback));
+        self
+    }
+
+    /// Set the list of selected files
+    pub fn selected_files(mut self, files: Vec<String>) -> Self {
+        self.selected_files = files;
+        self
+    }
+
+    /// Set a callback for when a file is removed
+    pub fn on_remove_file<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&usize, &mut Window, &mut App) + 'static,
+    {
+        self.on_remove_file = Some(Rc::new(callback));
         self
     }
 
@@ -409,6 +428,57 @@ impl RenderOnce for ChatInputBox {
                                         .into_any_element()
                                 },
                             ))
+                            // Render selected files
+                            .children(
+                                self.selected_files
+                                    .into_iter()
+                                    .enumerate()
+                                    .map(|(idx, file_path)| {
+                                    let on_remove = self.on_remove_file.clone();
+                                    let idx_clone = idx;
+
+                                    // Extract filename from path
+                                    let filename = std::path::Path::new(&file_path)
+                                        .file_name()
+                                        .and_then(|n| n.to_str())
+                                        .map(|s| s.to_string())
+                                        .unwrap_or(file_path.clone());
+
+                                    h_flex()
+                                        .gap_1()
+                                        .items_center()
+                                        .p_1()
+                                        .px_2()
+                                        .rounded(theme.radius)
+                                        .bg(theme.muted)
+                                        .border_1()
+                                        .border_color(theme.border)
+                                        .child(
+                                            Icon::new(IconName::File)
+                                                .size(px(14.))
+                                                .text_color(theme.accent),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(px(12.))
+                                                .text_color(theme.foreground)
+                                                .child(filename),
+                                        )
+                                        .child(
+                                            Button::new(("remove-file", idx))
+                                                .icon(Icon::new(IconName::Close))
+                                                .ghost()
+                                                .xsmall()
+                                                .when_some(on_remove, |btn, callback| {
+                                                    btn.on_click(move |_ev, window, cx| {
+                                                        callback(&idx_clone, window, cx);
+                                                    })
+                                                }),
+                                        )
+                                        .into_any_element()
+                                    })
+                                    .collect::<Vec<_>>(),
+                            )
                             .child(context_element),
                     )
                     .child(

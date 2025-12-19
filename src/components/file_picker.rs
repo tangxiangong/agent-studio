@@ -6,6 +6,7 @@ use gpui_component::{
     list::{ListDelegate, ListItem, ListState},
 };
 use std::path::{Path, PathBuf};
+use tokio::sync::mpsc;
 
 /// File item in the file picker
 #[derive(Clone, Debug)]
@@ -41,6 +42,7 @@ pub struct FilePickerDelegate {
     search_query: String,
     selected_index: Option<usize>,
     on_select: Option<Box<dyn Fn(FileItem) + 'static>>,
+    selection_tx: Option<mpsc::UnboundedSender<FileItem>>,
 }
 
 impl FilePickerDelegate {
@@ -53,7 +55,13 @@ impl FilePickerDelegate {
             search_query: String::new(),
             selected_index: None,
             on_select: None,
+            selection_tx: None,
         }
+    }
+
+    pub fn with_selection_sender(mut self, tx: mpsc::UnboundedSender<FileItem>) -> Self {
+        self.selection_tx = Some(tx);
+        self
     }
 
     pub fn on_select<F>(mut self, callback: F) -> Self
@@ -230,8 +238,14 @@ impl ListDelegate for FilePickerDelegate {
     fn confirm(&mut self, _: bool, _window: &mut Window, _cx: &mut Context<ListState<Self>>) {
         if let Some(selected_row) = self.selected_index {
             if let Some(item) = self.filtered_items.get(selected_row).cloned() {
-                if let Some(callback) = &self.on_select {
-                    callback(item);
+                // Only select files, not folders
+                if !item.is_folder {
+                    if let Some(callback) = &self.on_select {
+                        callback(item.clone());
+                    }
+                    if let Some(tx) = &self.selection_tx {
+                        let _ = tx.send(item);
+                    }
                 }
             }
         }

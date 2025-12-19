@@ -11,6 +11,8 @@ use agent_client_protocol::{
 use anyhow::{Result, anyhow};
 
 use crate::core::event_bus::session_bus::{SessionUpdateBusContainer, SessionUpdateEvent};
+use crate::core::event_bus::workspace_bus::{WorkspaceUpdateBusContainer, WorkspaceUpdateEvent};
+use crate::core::services::SessionStatus;
 
 use super::agent_service::AgentService;
 use super::persistence_service::{PersistedMessage, PersistenceService};
@@ -20,6 +22,7 @@ pub struct MessageService {
     session_bus: SessionUpdateBusContainer,
     agent_service: Arc<AgentService>,
     persistence_service: Arc<PersistenceService>,
+    workspace_bus: WorkspaceUpdateBusContainer,
 }
 
 impl MessageService {
@@ -27,21 +30,25 @@ impl MessageService {
         session_bus: SessionUpdateBusContainer,
         agent_service: Arc<AgentService>,
         persistence_service: Arc<PersistenceService>,
+        workspace_bus: WorkspaceUpdateBusContainer,
     ) -> Self {
         Self {
             session_bus,
             agent_service,
             persistence_service,
+            workspace_bus,
         }
     }
 
     /// Initialize persistence subscription
     ///
-    /// This should be called after the MessageService is created
+    /// This should be called after the MessageService is created.
+    /// Subscribes to both session_bus and workspace_bus events.
     pub fn init_persistence(&self) {
         let persistence_service = self.persistence_service.clone();
         let session_bus = self.session_bus.clone();
 
+        // Subscribe to session bus for all session updates
         session_bus.subscribe(move |event| {
             let session_id = event.session_id.clone();
             let update = (*event.update).clone();
@@ -60,7 +67,37 @@ impl MessageService {
             .detach();
         });
 
-        log::info!("MessageService persistence subscription initialized");
+        // Subscribe to workspace bus for session status changes
+        let persistence_service_ws = self.persistence_service.clone();
+        let workspace_bus = self.workspace_bus.clone();
+
+        workspace_bus.lock().unwrap().subscribe(move |event| {
+            if let WorkspaceUpdateEvent::SessionStatusUpdated {
+                session_id,
+                status,
+                ..
+            } = event
+            {
+                // Flush accumulator when session completes or becomes idle
+                if matches!(status, SessionStatus::Completed | SessionStatus::Idle) {
+                    let service = persistence_service_ws.clone();
+                    let session_id = session_id.clone();
+
+                    smol::spawn(async move {
+                        if let Err(e) = service.flush_session(&session_id).await {
+                            log::error!(
+                                "Failed to flush session {} on status change: {}",
+                                session_id,
+                                e
+                            );
+                        }
+                    })
+                    .detach();
+                }
+            }
+        });
+
+        log::info!("MessageService persistence subscriptions initialized (session_bus + workspace_bus)");
     }
 
     /// Send a user message to an existing session

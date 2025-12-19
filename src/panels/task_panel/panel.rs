@@ -698,6 +698,10 @@ impl TaskPanel {
         let workspace_name = workspace.name.clone();
         let task_count = workspace.tasks.len();
 
+        // Sort tasks by created_at descending (newest first)
+        let mut sorted_tasks = workspace.tasks.clone();
+        sorted_tasks.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
         v_flex()
             .w_full()
             // Workspace header row
@@ -786,8 +790,7 @@ impl TaskPanel {
             .when(is_expanded, |this| {
                 this.child(self.render_new_task_button(&workspace.id, cx))
                     .children(
-                        workspace
-                            .tasks
+                        sorted_tasks
                             .iter()
                             .map(|task| self.render_task_item(task, entity.clone(), cx)),
                     )
@@ -896,7 +899,7 @@ impl TaskPanel {
                     }
                 }),
             )
-            // First row: status icon + task name + mode
+            // First row: status icon + task name + relative time
             .child(
                 h_flex()
                     .w_full()
@@ -926,7 +929,7 @@ impl TaskPanel {
                         div()
                             .text_xs()
                             .text_color(theme.muted_foreground)
-                            .child(task.mode.clone()),
+                            .child(self.format_relative_time(&task.created_at)),
                     ),
             )
             // Second row: agent name + last message + status badge (aligned with task name)
@@ -1108,7 +1111,7 @@ impl TaskPanel {
                         div()
                             .text_xs()
                             .text_color(theme.muted_foreground)
-                            .child(task.mode.clone()),
+                            .child(self.format_relative_time(&task.created_at)),
                     ),
             )
             .child(
@@ -1148,6 +1151,49 @@ impl TaskPanel {
                         }),
                 )
             })
+    }
+
+    // ========================================================================
+    // Time formatting helpers
+    // ========================================================================
+
+    fn format_relative_time(&self, created_at: &chrono::DateTime<chrono::Utc>) -> String {
+        use chrono::Local;
+
+        let now = Local::now();
+        let created_local = created_at.with_timezone(&Local);
+        let duration = now.signed_duration_since(created_local);
+
+        let minutes = duration.num_minutes();
+        let hours = duration.num_hours();
+        let days = duration.num_days();
+
+        if minutes < 1 {
+            "刚刚".to_string()
+        } else if minutes < 60 {
+            format!("{}分钟前", minutes)
+        } else if hours < 24 {
+            format!("{}小时前", hours)
+        } else if days == 1 {
+            "昨天".to_string()
+        } else if days == 2 {
+            "前天".to_string()
+        } else if days < 7 {
+            format!("{}天前", days)
+        } else if days < 30 {
+            let weeks = days / 7;
+            if weeks == 1 {
+                "一周前".to_string()
+            } else {
+                format!("{}周前", weeks)
+            }
+        } else if days < 365 {
+            let months = days / 30;
+            format!("{}个月前", months)
+        } else {
+            let years = days / 365;
+            format!("{}年前", years)
+        }
     }
 
     // ========================================================================

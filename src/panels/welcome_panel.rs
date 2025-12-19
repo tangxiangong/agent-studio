@@ -790,10 +790,10 @@ impl Render for WelcomePanel {
                         // Chat input with title and send handler
                         {
                             let entity = cx.entity().clone();
-                            log::debug!(
-                                "[WelcomePanel::render] Creating ChatInputBox with {} code_selections",
-                                self.code_selections.len()
-                            );
+                            // log::debug!(
+                            //     "[WelcomePanel::render] Creating ChatInputBox with {} code_selections",
+                            //     self.code_selections.len()
+                            // );
                             ChatInputBox::new("welcome-chat-input", self.input_state.clone())
                                 // .title("New Task")
                                 .context_list(self.context_list.clone(), cx)

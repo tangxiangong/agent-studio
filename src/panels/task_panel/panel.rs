@@ -1116,27 +1116,35 @@ impl TaskPanel {
             )
             .child(
                 h_flex()
+                    .w_full()
+                    .justify_between()
                     .gap_2()
-                    .items_center()
-                    .text_xs()
-                    .text_color(theme.muted_foreground)
                     .child(
-                        Icon::new(self.status_icon(&task.status))
-                            .size_3()
-                            .text_color(self.status_color(&task.status)),
+                        h_flex()
+                            .gap_2()
+                            .items_center()
+                            .min_w_0()
+                            .flex_1()
+                            .text_xs()
+                            .text_color(theme.muted_foreground)
+                            .child(
+                                Icon::new(self.status_icon(&task.status))
+                                    .size_3()
+                                    .text_color(self.status_color(&task.status)),
+                            )
+                            .child(
+                                div()
+                                    .overflow_x_hidden()
+                                    .text_ellipsis()
+                                    .child(task.agent_name.clone()),
+                            )
+                            .when_some(task.last_message.clone(), |this, msg| {
+                                this.child("·")
+                                    .child(div().overflow_x_hidden().text_ellipsis().child(msg))
+                            }),
                     )
-                    .child(
-                        div()
-                            .overflow_x_hidden()
-                            .text_ellipsis()
-                            .child(task.agent_name.clone()),
-                    )
-                    .when_some(task.last_message.clone(), |this, msg| {
-                        this.child("·")
-                            .child(div().overflow_x_hidden().text_ellipsis().child(msg))
-                    }),
+                    .child(self.render_status_badge(&task.status, cx)),
             )
-            .child(self.render_status_badge(&task.status, cx))
             // Right-click context menu
             .context_menu(move |menu, _, _| {
                 let task_id = task_id.clone();

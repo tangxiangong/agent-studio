@@ -11,7 +11,7 @@ use gpui_component::{
     v_flex,
 };
 
-use agent_client_protocol::ImageContent;
+use agent_client_protocol::{AvailableCommand, ImageContent};
 
 use crate::{
     AppState, CreateTaskFromWelcome, WelcomeSession,
@@ -42,6 +42,12 @@ pub struct WelcomePanel {
     selected_files: Vec<String>,
     at_mention_active: bool,            // Track if @ mention is active
     pending_at_mention: Option<String>, // Pending @filename to insert
+    /// Command suggestions based on input
+    command_suggestions: Vec<AvailableCommand>,
+    /// Whether to show command suggestions (input starts with /)
+    show_command_suggestions: bool,
+    /// Selected command index for keyboard navigation
+    selected_command_index: Option<usize>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -324,6 +330,8 @@ impl WelcomePanel {
             selected_files: Vec::new(),
             at_mention_active: false,
             pending_at_mention: None,
+            command_suggestions: Vec::new(),
+            show_command_suggestions: false,
             _subscriptions: Vec::new(),
         };
 
@@ -482,7 +490,7 @@ impl WelcomePanel {
         }
     }
 
-    /// Handle input change - detect @ symbol to open file picker
+    /// Handle input change - detect @ symbol to open file picker and / for commands
     fn on_input_change(&mut self, cx: &mut Context<Self>) {
         let value = self.input_state.read(cx).value();
 
@@ -491,11 +499,75 @@ impl WelcomePanel {
             // Open the context popover
             self.context_popover_open = true;
             self.at_mention_active = true;
+            self.show_command_suggestions = false; // Hide commands when showing file picker
             cx.notify();
         } else if self.at_mention_active && !value.contains('@') {
             // @ was removed, deactivate mention mode
             self.at_mention_active = false;
         }
+
+        // Check if input starts with / for command suggestions
+        if value.trim_start().starts_with('/') && !self.at_mention_active {
+            // Get the command prefix (everything after the /)
+            let command_prefix = value.trim_start().trim_start_matches('/');
+
+            // Get available commands for the current session
+            let all_commands = self.get_available_commands(cx);
+
+            // Filter commands by prefix
+            if command_prefix.is_empty() {
+                // Show all commands when just "/" is entered
+                self.command_suggestions = all_commands;
+                self.show_command_suggestions = !self.command_suggestions.is_empty();
+            } else {
+                // Filter commands that start with the prefix
+                self.command_suggestions = all_commands
+                    .into_iter()
+                    .filter(|cmd| cmd.name.starts_with(command_prefix))
+                    .collect();
+                self.show_command_suggestions = !self.command_suggestions.is_empty();
+            }
+
+            log::debug!(
+                "[WelcomePanel] Command suggestions: {} matches for prefix '{}'",
+                self.command_suggestions.len(),
+                command_prefix
+            );
+            cx.notify();
+        } else {
+            // Not a command input, hide suggestions
+            if self.show_command_suggestions {
+                self.show_command_suggestions = false;
+                self.command_suggestions.clear();
+                cx.notify();
+            }
+        }
+    }
+
+    /// Get available commands for the current session
+    fn get_available_commands(&self, cx: &Context<Self>) -> Vec<AvailableCommand> {
+        // Get the current session ID
+        let session_id = match &self.current_session_id {
+            Some(id) => id,
+            None => {
+                log::debug!("[WelcomePanel] No current session, cannot get commands");
+                return Vec::new();
+            }
+        };
+
+        // Get MessageService
+        let message_service = match AppState::global(cx).message_service() {
+            Some(service) => service,
+            None => {
+                log::warn!("[WelcomePanel] MessageService not available");
+                return Vec::new();
+            }
+        };
+
+        // Get commands for the session
+        message_service
+            .get_commands_by_session_id(session_id)
+            .unwrap_or_default()
     }
 
     /// Refresh sessions for the currently selected agent
@@ -828,6 +900,9 @@ impl Render for WelcomePanel {
                                 .session_select(self.session_select.clone())
                                 .pasted_images(self.pasted_images.clone())
                                 .code_selections(self.code_selections.clone())
+                                // Pass command suggestions to ChatInputBox
+                                .command_suggestions(self.command_suggestions.clone())
+                                .show_command_suggestions(self.show_command_suggestions)
                                 .on_paste(move |window, cx| {
                                     entity.update(cx, |this, cx| {
                                         this.handle_paste(window, cx);

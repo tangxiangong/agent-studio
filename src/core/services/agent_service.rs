@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use agent_client_protocol::{self as acp, PromptResponse};
+use agent_client_protocol::{self as acp, AvailableCommand, PromptResponse};
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,8 @@ pub struct AgentSessionInfo {
     pub created_at: DateTime<Utc>,
     pub last_active: DateTime<Utc>,
     pub status: SessionStatus,
+    /// Available commands for this session (slash commands, etc.)
+    pub available_commands: Vec<AvailableCommand>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -104,6 +106,7 @@ impl AgentService {
             created_at: Utc::now(),
             last_active: Utc::now(),
             status: SessionStatus::Active,
+            available_commands: Vec::new(), // Will be populated by AvailableCommandsUpdate
         };
 
         // Insert into nested HashMap structure
@@ -209,6 +212,42 @@ impl AgentService {
                 info.last_active = Utc::now();
             }
         }
+    }
+
+    /// Update session's available commands
+    pub fn update_session_commands(&self, agent_name: &str, session_id: &str, commands: Vec<AvailableCommand>) {
+        if let Some(agent_sessions) = self.sessions.write().unwrap().get_mut(agent_name) {
+            if let Some(info) = agent_sessions.get_mut(session_id) {
+                log::info!(
+                    "Updating available commands for {}:{} - {} commands",
+                    agent_name,
+                    session_id,
+                    commands.len()
+                );
+                info.available_commands = commands;
+            } else {
+                log::warn!(
+                    "Session {} not found for agent {} when updating commands",
+                    session_id,
+                    agent_name
+                );
+            }
+        } else {
+            log::warn!(
+                "No sessions found for agent {} when updating commands",
+                agent_name
+            );
+        }
+    }
+
+    /// Get available commands for a session
+    pub fn get_session_commands(&self, agent_name: &str, session_id: &str) -> Option<Vec<AvailableCommand>> {
+        self.sessions
+            .read()
+            .unwrap()
+            .get(agent_name)?
+            .get(session_id)
+            .map(|info| info.available_commands.clone())
     }
     pub fn update_session_status(&self, agent_name: &str, session_id: &str, status: SessionStatus) {
         if let Some(agent_sessions) = self.sessions.write().unwrap().get_mut(agent_name) {

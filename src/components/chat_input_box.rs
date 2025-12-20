@@ -15,7 +15,7 @@ use gpui_component::{
     v_flex,
 };
 
-use agent_client_protocol::ImageContent;
+use agent_client_protocol::{AvailableCommand, ImageContent};
 
 use crate::app::actions::AddCodeSelection;
 use crate::components::AgentItem;
@@ -54,6 +54,10 @@ pub struct ChatInputBox {
     on_paste: Option<Rc<dyn Fn(&mut Window, &mut App) + 'static>>,
     session_status: Option<SessionStatus>, // Session status for button state
     session_id: Option<String>,            // Session ID for cancel action
+    /// Command suggestions to display
+    command_suggestions: Vec<AvailableCommand>,
+    /// Whether to show command suggestions
+    show_command_suggestions: bool,
 }
 
 impl ChatInputBox {
@@ -82,6 +86,8 @@ impl ChatInputBox {
             on_paste: None,
             session_status: None,
             session_id: None,
+            command_suggestions: Vec::new(),
+            show_command_suggestions: false,
         }
     }
 
@@ -227,6 +233,18 @@ impl ChatInputBox {
         self.session_id = session_id;
         self
     }
+
+    /// Set command suggestions to display
+    pub fn command_suggestions(mut self, commands: Vec<AvailableCommand>) -> Self {
+        self.command_suggestions = commands;
+        self
+    }
+
+    /// Set whether to show command suggestions
+    pub fn show_command_suggestions(mut self, show: bool) -> Self {
+        self.show_command_suggestions = show;
+        self
+    }
 }
 
 impl RenderOnce for ChatInputBox {
@@ -270,6 +288,74 @@ impl RenderOnce for ChatInputBox {
             popover.into_any_element()
         } else {
             add_context_button.into_any_element()
+        };
+
+        // Build command suggestions popover
+        let command_popover = if self.show_command_suggestions && !self.command_suggestions.is_empty() {
+            let commands = self.command_suggestions.clone();
+
+            Some(
+                Popover::new("command-suggestions-popover")
+                    .p_0()
+                    .text_sm()
+                    .open(true) // Always open when show_command_suggestions is true
+                    .trigger(div()) // Empty div as trigger since we control visibility via open state
+                    .anchor_corner(gpui::AnchorCorner::TopLeft)
+                    .child(
+                        v_flex()
+                            .w(px(500.))
+                            .max_h(px(300.))
+                            .gap_1()
+                            .p_2()
+                            .rounded(theme.radius)
+                            .bg(theme.muted)
+                            .border_1()
+                            .border_color(theme.border)
+                            .shadow_lg()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme.muted_foreground)
+                                    .pb_1()
+                                    .child("Available Commands:")
+                            )
+                            .children(
+                                commands.iter().map(|cmd| {
+                                    let name = cmd.name.clone();
+                                    let description = cmd.description.clone();
+
+                                    h_flex()
+                                        .w_full()
+                                        .gap_2()
+                                        .p_2()
+                                        .rounded(theme.radius)
+                                        .hover(|this| this.bg(theme.secondary))
+                                        .cursor_default()
+                                        .child(
+                                            div()
+                                                .text_sm()
+                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .text_color(theme.accent)
+                                                .min_w(px(100.))
+                                                .child(format!("/{}", name))
+                                        )
+                                        .when(!description.is_empty(), |this| {
+                                            this.child(
+                                                div()
+                                                    .text_sm()
+                                                    .text_color(theme.foreground)
+                                                    .child(description)
+                                            )
+                                        })
+                                        .into_any_element()
+                                }).collect::<Vec<_>>()
+                            )
+                    )
+                    .into_any_element()
+            )
+        } else {
+            None
         };
 
         v_flex()
@@ -485,6 +571,60 @@ impl RenderOnce for ChatInputBox {
                         // Textarea (multi-line input)
                         Input::new(&self.input_state).appearance(false),
                     )
+                    // Command suggestions list
+                    .when(self.show_command_suggestions && !self.command_suggestions.is_empty(), |this| {
+                        let commands = self.command_suggestions.clone();
+                        this.child(
+                            v_flex()
+                                .w_full()
+                                .gap_1()
+                                .p_2()
+                                .rounded(theme.radius)
+                                .bg(theme.muted)
+                                .border_1()
+                                .border_color(theme.border)
+                                .max_h(px(200.))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(theme.muted_foreground)
+                                        .pb_1()
+                                        .child("Available Commands:")
+                                )
+                                .children(
+                                    commands.iter().map(|cmd| {
+                                        let name = cmd.name.clone();
+                                        let description = cmd.description.clone();
+
+                                        h_flex()
+                                            .w_full()
+                                            .gap_2()
+                                            .p_2()
+                                            .rounded(theme.radius)
+                                            .hover(|this| this.bg(theme.secondary))
+                                            .cursor_default()
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                                    .text_color(theme.accent)
+                                                    .min_w(px(80.))
+                                                    .child(format!("/{}", name))
+                                            )
+                                            .when(!description.is_empty(), |this| {
+                                                this.child(
+                                                    div()
+                                                        .text_sm()
+                                                        .text_color(theme.foreground)
+                                                        .child(description)
+                                                )
+                                            })
+                                            .into_any_element()
+                                    }).collect::<Vec<_>>()
+                                )
+                        )
+                    })
                     .child(
                         // Bottom row: Action buttons
                         h_flex()

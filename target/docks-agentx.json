@@ -26,7 +26,7 @@
     "info": {
       "stack": {
         "sizes": [
-          1100.6666
+          414.5
         ],
         "axis": 0
       }
@@ -59,7 +59,7 @@
       "info": {
         "stack": {
           "sizes": [
-            872.6667
+            801.0
           ],
           "axis": 1
         }
@@ -84,6 +84,15 @@
                   "story_klass": "CodeEditorPanel"
                 }
               }
+            },
+            {
+              "panel_name": "DockPanelContainer",
+              "children": [],
+              "info": {
+                "panel": {
+                  "story_klass": "ToolCallDetailPanel"
+                }
+              }
             }
           ],
           "info": {
@@ -104,7 +113,7 @@
     },
     "placement": "right",
     "size": 521.3281,
-    "open": false
+    "open": true
   },
   "bottom_dock": {
     "panel": {

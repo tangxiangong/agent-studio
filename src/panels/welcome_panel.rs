@@ -140,17 +140,10 @@ impl WelcomePanel {
             let input_subscription = cx.subscribe_in(
                 &this.input_state,
                 window,
-                |this, _input, event: &gpui_component::input::InputEvent, window, cx| {
+                |this, _input, event: &gpui_component::input::InputEvent, _window, cx| {
                     match event {
                         gpui_component::input::InputEvent::Change => {
                             this.on_input_change(cx);
-                        }
-                        gpui_component::input::InputEvent::PressEnter { .. } => {
-                            if this.show_command_suggestions {
-                                if let Some(command) = this.command_suggestions.first().cloned() {
-                                    this.apply_command_selection(&command, window, cx);
-                                }
-                            }
                         }
                         _ => {}
                     }

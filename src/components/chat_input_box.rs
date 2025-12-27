@@ -1,18 +1,33 @@
 use gpui::{
-    AnyElement, App, Bounds, ElementId, Entity, Focusable, InteractiveElement, IntoElement,
-    ParentElement, Pixels, RenderOnce, Styled, Window, div, prelude::FluentBuilder, px,
+    AnyElement, App, ElementId, Entity, Focusable, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, SharedString, Styled, Window, div, prelude::FluentBuilder, px,
 };
 use std::{rc::Rc, sync::Arc};
 
 use gpui_component::{
-    ActiveTheme, Disableable, ElementExt, Icon, IconName, Sizable, button::{Button, ButtonCustomVariant, ButtonVariants}, h_flex, input::{Input, InputState}, list::{List, ListDelegate, ListState}, popover::Popover, select::{Select, SelectState}, v_flex
+    ActiveTheme, Disableable, ElementExt, Icon, IconName, Sizable,
+    button::{Button, ButtonCustomVariant, ButtonVariants}, h_flex,
+    input::{Input, InputState},
+    list::{List, ListDelegate, ListState}, popover::Popover, select::{Select, SelectState}, v_flex,
 };
 
 use agent_client_protocol::{AvailableCommand, ImageContent};
 
 use crate::app::actions::AddCodeSelection;
-use crate::components::{AgentItem, CommandSuggestionsPopover};
+use crate::components::{
+    AgentItem, InputSuggestion, InputSuggestionItem, InputSuggestionState,
+};
 use crate::core::services::SessionStatus;
+
+impl InputSuggestionItem for AvailableCommand {
+    fn label(&self) -> SharedString {
+        SharedString::from(self.name.clone())
+    }
+
+    fn apply_text(&self) -> SharedString {
+        SharedString::from(format!("/{} ", self.name))
+    }
+}
 
 /// A reusable chat input component with context controls and send button.
 ///
@@ -53,11 +68,6 @@ pub struct ChatInputBox {
     show_command_suggestions: bool,
     /// Optional click/confirm handler for command selection
     on_command_select: Option<Box<dyn Fn(&AvailableCommand, &mut Window, &mut App) + 'static>>,
-}
-
-#[derive(Default)]
-struct CommandPopoverAnchor {
-    bounds: Option<Bounds<Pixels>>,
 }
 
 impl ChatInputBox {
@@ -264,11 +274,14 @@ impl RenderOnce for ChatInputBox {
         let on_new_session = self.on_new_session;
         let on_paste_callback = self.on_paste.clone();
         let input_state_for_paste = self.input_state.clone();
-        let command_anchor = window.use_keyed_state(
-            "command-popover-anchor",
-            cx,
-            |_, _| CommandPopoverAnchor::default(),
+        let input_state = self.input_state.clone();
+        let suggestion_state_id = ElementId::NamedChild(
+            Arc::new(self.id.clone()),
+            "command-suggestions".into(),
         );
+        let suggestion_state = window.use_keyed_state(suggestion_state_id, cx, |window, cx| {
+            InputSuggestionState::with_input(input_state.clone(), window, cx)
+        });
         let input_value = self.input_state.read(cx).value();
         let is_empty = input_value.trim().is_empty();
 
@@ -308,28 +321,7 @@ impl RenderOnce for ChatInputBox {
         };
 
         let show_commands = self.show_command_suggestions && !self.command_suggestions.is_empty();
-        let command_popover = if show_commands {
-            let bounds = command_anchor.read(cx).bounds;
-            let on_command_select = self.on_command_select;
-
-            let list_id = ElementId::NamedChild(
-                Arc::new(self.id.clone()),
-                "command-suggestions-list".into(),
-            );
-
-            let mut popover = CommandSuggestionsPopover::new(self.command_suggestions)
-                .anchor_bounds(bounds)
-                .visible(true)
-                .list_id(list_id);
-
-            if let Some(handler) = on_command_select {
-                popover = popover.on_select(handler);
-            }
-
-            popover.into_any_element()
-        } else {
-            div().into_any_element()
-        };
+        let apply_on_confirm = self.on_command_select.is_none();
 
         v_flex()
             .w_full()
@@ -542,18 +534,51 @@ impl RenderOnce for ChatInputBox {
                     )
                     .child(
                         // Textarea (multi-line input)
-                        div()
-                            .w_full()
-                            .on_prepaint({
-                                let command_anchor = command_anchor.clone();
-                                move |bounds, _, cx| {
-                                    command_anchor.update(cx, |state, cx| {
-                                        state.bounds = Some(bounds);
-                                        cx.notify();
-                                    });
-                                }
-                            })
-                            .child(Input::new(&self.input_state).appearance(false)),
+                        {
+                            let mut input = InputSuggestion::new(&suggestion_state)
+                                .id(ElementId::NamedChild(
+                                    Arc::new(self.id.clone()),
+                                    "command-suggestion-input".into(),
+                                ))
+                                .items(self.command_suggestions.clone())
+                                .enabled(show_commands)
+                                .header("Available Commands")
+                                .max_height(px(200.))
+                                .apply_on_confirm(apply_on_confirm)
+                                .input(|state| Input::new(state).appearance(false))
+                                .render_item(|command, _selected, _window, cx| {
+                                    let theme = cx.theme();
+                                    h_flex()
+                                        .w_full()
+                                        .gap_3()
+                                        .items_center()
+                                        .child(
+                                            div()
+                                                .w(px(140.))
+                                                .text_sm()
+                                                .font_family("Monaco, 'Courier New', monospace")
+                                                .text_color(theme.popover_foreground)
+                                                .child(format!("/{}", command.name)),
+                                        )
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .text_sm()
+                                                .text_color(theme.muted_foreground)
+                                                .overflow_x_hidden()
+                                                .text_ellipsis()
+                                                .child(command.description.clone()),
+                                        )
+                                });
+
+                            if let Some(on_command_select) = self.on_command_select {
+                                input = input.on_confirm(move |command, window, cx| {
+                                    on_command_select(command, window, cx);
+                                });
+                            }
+
+                            div().w_full().child(input)
+                        },
                     )
                     .child(
                         // Bottom row: Action buttons
@@ -668,6 +693,5 @@ impl RenderOnce for ChatInputBox {
                             }),
                     ),
             )
-            .child(command_popover)
     }
 }

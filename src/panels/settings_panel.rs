@@ -610,6 +610,7 @@ impl SettingsPanel {
         let url_input = cx.new(|cx| InputState::new(window, cx).placeholder("Base URL"));
         let key_input = cx.new(|cx| InputState::new(window, cx).placeholder("API Key"));
         let model_input = cx.new(|cx| InputState::new(window, cx).placeholder("Model name"));
+        let entity = cx.entity().downgrade();
 
         window.open_dialog(cx, move |dialog, _window, _cx| {
             dialog
@@ -622,6 +623,7 @@ impl SettingsPanel {
                     let url_input = url_input.clone();
                     let key_input = key_input.clone();
                     let model_input = model_input.clone();
+                    let entity = entity.clone();
 
                     move |_, _window, cx| {
                         let name = name_input.read(cx).text().to_string().trim().to_string();
@@ -645,13 +647,22 @@ impl SettingsPanel {
                                 api_key: key,
                                 model_name: model,
                             };
+                            let name_clone = name.clone();
+                            let entity = entity.clone();
 
                             cx.spawn(async move |cx| {
-                                match service.add_model(name.clone(), config).await {
+                                match service.add_model(name_clone.clone(), config.clone()).await {
                                     Ok(_) => {
-                                        log::info!("Successfully added model: {}", name);
-                                        // Reload panel to show new config
-                                        _ = cx.update(|_cx| {});
+                                        log::info!("Successfully added model: {}", name_clone);
+                                        // Update UI
+                                        _ = cx.update(|cx| {
+                                            if let Some(panel) = entity.upgrade() {
+                                                panel.update(cx, |this, cx| {
+                                                    this.model_configs.insert(name_clone, config);
+                                                    cx.notify();
+                                                });
+                                            }
+                                        });
                                     }
                                     Err(e) => {
                                         log::error!("Failed to add model: {}", e);
@@ -684,6 +695,7 @@ impl SettingsPanel {
             return;
         }
         let config = config.unwrap();
+        let entity = cx.entity().downgrade();
 
         let provider_input = cx.new(|cx| {
             let mut state = InputState::new(window, cx);
@@ -718,6 +730,7 @@ impl SettingsPanel {
                     let model_input = model_input.clone();
                     let model_name = model_name.clone();
                     let enabled = config.enabled;
+                    let entity = entity.clone();
 
                     move |_, _window, cx| {
                         let provider = provider_input.read(cx).text().to_string().trim().to_string();
@@ -741,12 +754,21 @@ impl SettingsPanel {
                                 api_key: key,
                                 model_name: model,
                             };
+                            let entity = entity.clone();
 
                             cx.spawn(async move |cx| {
-                                match service.update_model(&model_name_for_async, config).await {
+                                match service.update_model(&model_name_for_async, config.clone()).await {
                                     Ok(_) => {
                                         log::info!("Successfully updated model: {}", model_name_for_async);
-                                        _ = cx.update(|_cx| {});
+                                        // Update UI
+                                        _ = cx.update(|cx| {
+                                            if let Some(panel) = entity.upgrade() {
+                                                panel.update(cx, |this, cx| {
+                                                    this.model_configs.insert(model_name_for_async, config);
+                                                    cx.notify();
+                                                });
+                                            }
+                                        });
                                     }
                                     Err(e) => {
                                         log::error!("Failed to update model: {}", e);
@@ -772,6 +794,8 @@ impl SettingsPanel {
     }
 
     fn show_delete_model_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>, model_name: String) {
+        let entity = cx.entity().downgrade();
+
         window.open_dialog(cx, move |dialog, _window, _cx| {
             let model_name_clone = model_name.clone();
             dialog
@@ -784,17 +808,27 @@ impl SettingsPanel {
                         .cancel_text("Cancel")
                 )
                 .on_ok({
+                    let entity = entity.clone();
                     move |_, _window, cx| {
                         // Save to config file
                         if let Some(service) = AppState::global(cx).agent_config_service() {
                             let service = service.clone();
                             let name = model_name_clone.clone();
+                            let entity = entity.clone();
 
                             cx.spawn(async move |cx| {
                                 match service.remove_model(&name).await {
                                     Ok(_) => {
                                         log::info!("Successfully deleted model: {}", name);
-                                        _ = cx.update(|_cx| {});
+                                        // Update UI
+                                        _ = cx.update(|cx| {
+                                            if let Some(panel) = entity.upgrade() {
+                                                panel.update(cx, |this, cx| {
+                                                    this.model_configs.remove(&name);
+                                                    cx.notify();
+                                                });
+                                            }
+                                        });
                                     }
                                     Err(e) => {
                                         log::error!("Failed to delete model: {}", e);

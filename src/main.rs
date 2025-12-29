@@ -16,11 +16,6 @@ fn main() {
         let session_bus = agentx::AppState::global(cx).session_bus.clone();
         let permission_bus = agentx::AppState::global(cx).permission_bus.clone();
 
-        open_new(cx, |_, _, _| {
-            // Load settings and config
-        })
-        .detach();
-
         cx.spawn(async move |cx| {
             let config: Config = match std::fs::read_to_string(&config_path)
                 .with_context(|| format!("failed to read {}", config_path.display()))
@@ -80,6 +75,14 @@ fn main() {
                     // Initialize persistence subscription in async context
                     if let Ok(Some(message_service)) = init_result {
                         message_service.init_persistence();
+                        let _ = cx.update(|cx| {
+                            open_new(cx, |_, _, _| {
+                                // Load settings and config
+                            })
+                            .detach();
+                        });
+                    } else {
+                        eprintln!("MessageService not initialized, window will not open");
                     }
                 }
                 Err(e) => {

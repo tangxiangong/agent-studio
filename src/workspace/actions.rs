@@ -1,12 +1,12 @@
 use agent_client_protocol as acp;
 use gpui::*;
-use gpui_component::dock::{DockItem, DockPlacement};
+use gpui_component::dock::{DockItem, DockPlacement, PanelView, TabPanel};
 use std::sync::Arc;
 
 use crate::{
-    AddPanel, AppState, ConversationPanel, CreateTaskFromWelcome, NewSessionConversationPanel,
-    SendMessageToSession, SettingsPanel, ShowConversationPanel, ShowToolCallDetail,
-    ShowWelcomePanel, ToggleDockToggleButton, TogglePanelVisible, WelcomePanel,
+    AddPanel, AddSessionPanel, AppState, ConversationPanel, CreateTaskFromWelcome,
+    NewSessionConversationPanel, SendMessageToSession, SettingsPanel, ShowConversationPanel,
+    ShowToolCallDetail, ShowWelcomePanel, ToggleDockToggleButton, TogglePanelVisible, WelcomePanel,
     app::actions::{
         AddAgent, CancelSession, ChangeConfigPath, ReloadAgentConfig, RemoveAgent, RestartAgent,
         SetUploadDir, Submit, UpdateAgent,
@@ -39,11 +39,10 @@ impl DockWorkspace {
         });
     }
 
-    /// Helper method to show ConversationPanel in the current active tab
-    /// This will add the panel to the current TabPanel instead of replacing the entire center
+    /// Helper method to show ConversationPanel in the active center tab
     ///
-    /// If session_id is provided, it will load the conversation history for that session
-    /// Otherwise, it will create a new conversation panel with mock data
+    /// If session_id is provided, it will load the conversation history for that session.
+    /// Otherwise, it will create a new conversation panel with mock data.
     fn show_conversation_panel(
         &mut self,
         session_id: Option<String>,
@@ -51,28 +50,74 @@ impl DockWorkspace {
         cx: &mut Context<Self>,
     ) {
         let conversation_panel = if let Some(session_id) = session_id {
-            // Create panel for specific session (will load history automatically)
             DockPanelContainer::panel_for_session(session_id, window, cx)
         } else {
-            // Create new panel without session (mock data)
             DockPanelContainer::panel::<ConversationPanel>(window, cx)
         };
 
-        let conversation_item =
-            DockItem::tab(conversation_panel, &self.dock_area.downgrade(), window, cx);
+        self.replace_active_center_panel(Arc::new(conversation_panel), window, cx);
+    }
 
-        let conversation_dock = DockItem::split_with_sizes(
-            Axis::Horizontal,
-            vec![conversation_item],
-            vec![None, None],
-            &self.dock_area.downgrade(),
-            window,
-            cx,
-        );
-
+    fn replace_active_center_panel(
+        &mut self,
+        new_panel: Arc<dyn PanelView>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.dock_area.update(cx, |dock_area, cx| {
-            dock_area.set_center(conversation_dock, window, cx);
+            let selection =
+                Self::find_focused_tab_panel(dock_area.items(), window, cx)
+                    .or_else(|| Self::find_first_tab_panel(dock_area.items(), cx));
+
+            if let Some((tab_panel, active_panel)) = selection {
+                tab_panel.update(cx, |tab_panel, cx| {
+                    tab_panel.add_panel(new_panel.clone(), window, cx);
+                    tab_panel.remove_panel(active_panel.clone(), window, cx);
+                });
+            } else {
+                dock_area.add_panel(new_panel, DockPlacement::Center, None, window, cx);
+            }
         });
+    }
+
+    fn find_focused_tab_panel(
+        item: &DockItem,
+        window: &Window,
+        cx: &App,
+    ) -> Option<(Entity<TabPanel>, Arc<dyn PanelView>)> {
+        match item {
+            DockItem::Tabs { view, .. } => {
+                let active_panel = view.read(cx).active_panel(cx)?;
+                if active_panel
+                    .focus_handle(cx)
+                    .contains_focused(window, cx)
+                {
+                    Some((view.clone(), active_panel))
+                } else {
+                    None
+                }
+            }
+            DockItem::Split { items, .. } => items
+                .iter()
+                .find_map(|item| Self::find_focused_tab_panel(item, window, cx)),
+            DockItem::Tiles { .. } | DockItem::Panel { .. } => None,
+        }
+    }
+
+    fn find_first_tab_panel(
+        item: &DockItem,
+        cx: &App,
+    ) -> Option<(Entity<TabPanel>, Arc<dyn PanelView>)> {
+        match item {
+            DockItem::Tabs { view, .. } => view
+                .read(cx)
+                .active_panel(cx)
+                .map(|active_panel| (view.clone(), active_panel)),
+            DockItem::Split { items, .. } => items
+                .iter()
+                .find_map(|item| Self::find_first_tab_panel(item, cx)),
+            DockItem::Tiles { .. } | DockItem::Panel { .. } => None,
+        }
     }
     /// Handle AddPanel action - randomly add a conversation panel to specified dock area
     pub(super) fn on_action_add_panel(
@@ -86,6 +131,24 @@ impl DockWorkspace {
 
         self.dock_area.update(cx, |dock_area, cx| {
             dock_area.add_panel(panel, action.0, None, window, cx);
+        });
+    }
+
+    /// Handle AddSessionPanel action - add a conversation panel for a specific session
+    pub(super) fn on_action_add_session_panel(
+        &mut self,
+        action: &AddSessionPanel,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let panel = if action.session_id.is_empty() {
+            Arc::new(DockPanelContainer::panel::<ConversationPanel>(window, cx))
+        } else {
+            Arc::new(Self::panel_for_session(action.session_id.clone(), window, cx))
+        };
+
+        self.dock_area.update(cx, |dock_area, cx| {
+            dock_area.add_panel(panel, action.placement, None, window, cx);
         });
     }
 

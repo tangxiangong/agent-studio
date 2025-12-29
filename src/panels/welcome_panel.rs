@@ -49,7 +49,7 @@ pub struct WelcomePanel {
     show_command_suggestions: bool,
     /// Selected command index for keyboard navigation
     _subscriptions: Vec<Subscription>,
-    /// Available MCP servers
+    /// Available MCP servers (name, config)
     available_mcps: Vec<(String, McpServerConfig)>,
     /// Selected MCP server names
     selected_mcps: Vec<String>,
@@ -328,7 +328,7 @@ impl WelcomePanel {
             _ = cx.update(|cx| {
                 if let Some(this) = weak_self.upgrade() {
                     this.update(cx, |this, cx| {
-                        // Convert HashMap to Vec of tuples
+                        // Directly use the HashMap as Vec of tuples
                         this.available_mcps = mcp_servers.into_iter().collect();
                         cx.notify();
                     });
@@ -995,10 +995,16 @@ impl Render for WelcomePanel {
                                 // Pass MCP servers and selection to ChatInputBox
                                 .available_mcps(self.available_mcps.clone())
                                 .selected_mcps(self.selected_mcps.clone())
-                                .on_mcp_change(cx.listener(|this, mcps: &Vec<String>, _window, cx| {
-                                    // Update selected MCPs when user changes selection
-                                    this.selected_mcps = mcps.clone();
-                                    log::info!("[WelcomePanel] MCP selection changed: {:?}", mcps);
+                                .on_mcp_toggle(cx.listener(|this, (name, checked): &(String, bool), _window, cx| {
+                                    // Simple toggle logic
+                                    if *checked {
+                                        if !this.selected_mcps.contains(name) {
+                                            this.selected_mcps.push(name.clone());
+                                        }
+                                    } else {
+                                        this.selected_mcps.retain(|s| s != name);
+                                    }
+                                    log::info!("[WelcomePanel] MCP '{}' {}", name, if *checked { "selected" } else { "deselected" });
                                     cx.notify();
                                 }))
                                 .on_paste(move |window, cx| {

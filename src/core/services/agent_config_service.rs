@@ -9,8 +9,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use anyhow::{Context, Result, anyhow};
-use serde::{Deserialize, Serialize};
-
 use crate::core::agent::AgentManager;
 use crate::core::config::{AgentProcessConfig, Config};
 use crate::core::event_bus::{AgentConfigBusContainer, AgentConfigEvent};

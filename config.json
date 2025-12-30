@@ -15,38 +15,22 @@
   },
   "upload_dir": ".",
   "models": {
-    "Claude": {
-      "enabled": true,
-      "provider": "Anthropic",
-      "base_url": "https://api.anthropic.com/v1",
-      "api_key": "sss",
-      "model_name": "claude-3-opus-20240229"
-    },
     "GPT-4": {
       "enabled": true,
       "provider": "OpenAI",
       "base_url": "https://api.openai.com/v1",
       "api_key": "121212",
       "model_name": "gpt-4"
-    }
-  },
-  "mcp_servers": {
-    "web-search": {
-      "enabled": true,
-      "description": "Web search MCP server for real-time information",
-      "config": {
-        "search_engine": "google",
-        "api_key": ""
-      }
     },
-    "filesystem": {
+    "Claude": {
       "enabled": true,
-      "description": "File system operations MCP server",
-      "config": {
-        "root_path": "."
-      }
+      "provider": "Anthropic",
+      "base_url": "https://api.anthropic.com/v1",
+      "api_key": "sss12332",
+      "model_name": "claude-3-opus-20240229"
     }
   },
+  "mcp_servers": {},
   "commands": {
     "summarize": {
       "description": "Summarize the current conversation",
@@ -58,7 +42,7 @@
     },
     "review": {
       "description": "Review code for best practices",
-      "template": "Please review the following code and provide feedback on:\n- Code quality\n- Best practices\n- Potential bugs\n- Performance improvements\n- Security concerns"
+      "template": "Please review the following code and provide feedback on:\\n- Code quality\\n- Best practices\\n- Potential bugs\\n- Performance improvements\\n- Security concerns"
     }
   }
 }

@@ -94,6 +94,9 @@ pub struct SettingsPanel {
     cached_mcp_servers: HashMap<String, McpServerConfig>,
     cached_commands: HashMap<String, CommandConfig>,
     cached_upload_dir: PathBuf,
+    // JSON editor state for MCP servers
+    mcp_json_editor: Entity<InputState>,
+    mcp_json_error: Option<String>,
 }
 
 struct OpenURLSettingField {
@@ -150,6 +153,19 @@ impl SettingsPanel {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.set_global::<AppSettings>(AppSettings::default());
 
+        let mcp_json_editor = cx.new(|cx| {
+            InputState::new(window, cx)
+                .code_editor("json")
+                .line_number(true)
+                .indent_guides(true)
+                .tab_size(gpui_component::input::TabSize {
+                    tab_size: 2,
+                    hard_tabs: false,
+                })
+                .soft_wrap(false)
+                .placeholder("Paste MCP server JSON configuration here...")
+        });
+
         let panel = Self {
             focus_handle: cx.focus_handle(),
             group_variant: GroupBoxVariant::Outline,
@@ -161,6 +177,8 @@ impl SettingsPanel {
             cached_mcp_servers: HashMap::new(),
             cached_commands: HashMap::new(),
             cached_upload_dir: PathBuf::from("."),
+            mcp_json_editor,
+            mcp_json_error: None,
         };
 
         // Load all configuration from service asynchronously
@@ -841,6 +859,120 @@ impl SettingsPanel {
         });
     }
 
+    // MCP JSON Editor helpers
+    fn load_mcp_servers_to_json(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let json = serde_json::json!({
+            "mcpServers": self.cached_mcp_servers.iter().map(|(name, config)| {
+                (name.clone(), serde_json::json!({
+                    "enabled": config.enabled,
+                    "description": config.description,
+                    "config": config.config
+                }))
+            }).collect::<serde_json::Map<String, serde_json::Value>>()
+        });
+
+        let json_str = serde_json::to_string_pretty(&json).unwrap_or_else(|e| {
+            format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
+        });
+
+        self.mcp_json_editor.update(cx, |input, cx| {
+            input.set_value(json_str, window, cx);
+        });
+
+        self.mcp_json_error = None;
+        cx.notify();
+    }
+
+    fn validate_mcp_json(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let json_text = self.mcp_json_editor.read(cx).text().to_string();
+
+        match serde_json::from_str::<serde_json::Value>(&json_text) {
+            Ok(value) => {
+                // Try to parse as MCP servers config
+                if let Some(obj) = value.as_object() {
+                    if let Some(mcp_servers) = obj.get("mcpServers").or_else(|| obj.get("mcp_servers")) {
+                        match serde_json::from_value::<HashMap<String, McpServerConfig>>(mcp_servers.clone()) {
+                            Ok(servers) => {
+                                self.mcp_json_error = Some(format!("✓ Valid! Found {} MCP server(s)", servers.len()));
+                                log::info!("JSON validation successful: {} servers", servers.len());
+                            }
+                            Err(e) => {
+                                self.mcp_json_error = Some(format!("✗ Invalid MCP config: {}", e));
+                                log::warn!("MCP config validation failed: {}", e);
+                            }
+                        }
+                    } else {
+                        self.mcp_json_error = Some("✗ Missing 'mcpServers' or 'mcp_servers' field".to_string());
+                    }
+                } else {
+                    self.mcp_json_error = Some("✗ JSON must be an object".to_string());
+                }
+            }
+            Err(e) => {
+                self.mcp_json_error = Some(format!("✗ Invalid JSON: {}", e));
+                log::warn!("JSON parsing failed: {}", e);
+            }
+        }
+
+        cx.notify();
+    }
+
+    fn save_mcp_json(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let json_text = self.mcp_json_editor.read(cx).text().to_string();
+
+        match serde_json::from_str::<serde_json::Value>(&json_text) {
+            Ok(value) => {
+                if let Some(obj) = value.as_object() {
+                    if let Some(mcp_servers) = obj.get("mcpServers").or_else(|| obj.get("mcp_servers")) {
+                        match serde_json::from_value::<HashMap<String, McpServerConfig>>(mcp_servers.clone()) {
+                            Ok(servers) => {
+                                // Save each server
+                                if let Some(service) = AppState::global(cx).agent_config_service() {
+                                    let service = service.clone();
+
+                                    cx.spawn_in(_window, async move |_this, _cx| {
+                                        // Remove old servers first
+                                        let old_servers = service.list_mcp_servers().await;
+                                        for (name, _) in old_servers {
+                                            if let Err(e) = service.remove_mcp_server(&name).await {
+                                                log::error!("Failed to remove old MCP server '{}': {}", name, e);
+                                            }
+                                        }
+
+                                        // Add new servers
+                                        for (name, config) in servers {
+                                            if let Err(e) = service.add_mcp_server(name.clone(), config).await {
+                                                log::error!("Failed to add MCP server '{}': {}", name, e);
+                                            }
+                                        }
+
+                                        log::info!("MCP servers saved successfully");
+                                    }).detach();
+
+                                    self.mcp_json_error = Some("✓ Saved successfully!".to_string());
+                                } else {
+                                    self.mcp_json_error = Some("✗ Agent config service not available".to_string());
+                                }
+                            }
+                            Err(e) => {
+                                self.mcp_json_error = Some(format!("✗ Invalid MCP config: {}", e));
+                            }
+                        }
+                    } else {
+                        self.mcp_json_error = Some("✗ Missing 'mcpServers' or 'mcp_servers' field".to_string());
+                    }
+                } else {
+                    self.mcp_json_error = Some("✗ JSON must be an object".to_string());
+                }
+            }
+            Err(e) => {
+                self.mcp_json_error = Some(format!("✗ Invalid JSON: {}", e));
+            }
+        }
+
+        cx.notify();
+    }
+
     // MCP Server configuration dialogs
     fn show_add_mcp_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name_input = cx.new(|cx| InputState::new(window, cx).placeholder("Server name"));
@@ -868,10 +1000,17 @@ impl SettingsPanel {
                         }
 
                         // Parse config JSON
-                        let config_map: std::collections::HashMap<String, String> = if !config_str.is_empty() {
-                            serde_json::from_str(&config_str).unwrap_or_default()
+                        let mcp_server_config: agent_client_protocol::McpServer = if !config_str.is_empty() {
+                            match serde_json::from_str(&config_str) {
+                                Ok(config) => config,
+                                Err(e) => {
+                                    log::error!("Failed to parse MCP server config: {}", e);
+                                    return false;
+                                }
+                            }
                         } else {
-                            std::collections::HashMap::new()
+                            log::error!("MCP server config cannot be empty");
+                            return false;
                         };
 
                         // Save to config file
@@ -880,7 +1019,7 @@ impl SettingsPanel {
                             let config = crate::core::config::McpServerConfig {
                                 enabled: true,
                                 description: desc,
-                                config: config_map,
+                                config: mcp_server_config,
                             };
 
                             cx.spawn(async move |cx| {
@@ -935,7 +1074,7 @@ impl SettingsPanel {
                     let desc_input = desc_input.clone();
                     let server_name = server_name.clone();
                     let enabled = config.enabled;
-                    let config_map = config.config.clone();
+                    let mcp_server_config = config.config.clone();
                     let entity = entity.clone();
 
                     move |_, _window, cx| {
@@ -948,7 +1087,7 @@ impl SettingsPanel {
                             let config = crate::core::config::McpServerConfig {
                                 enabled,
                                 description: desc,
-                                config: config_map.clone(),
+                                config: mcp_server_config.clone(),
                             };
                             let entity = entity.clone();
 
@@ -2079,13 +2218,12 @@ impl SettingsPanel {
                                             );
                                         }
 
-                                        if !config.config.is_empty() {
-                                            mcp_info = mcp_info.child(
-                                                Label::new(format!("Config: {} entries", config.config.len()))
-                                                    .text_xs()
-                                                    .text_color(cx.theme().muted_foreground)
-                                            );
-                                        }
+                                        // Note: Config is a structured McpServer type
+                                        mcp_info = mcp_info.child(
+                                            Label::new("Config: Configured")
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                        );
 
                                         content = content.child(
                                             h_flex()
@@ -2152,6 +2290,118 @@ impl SettingsPanel {
                                 }
 
                                 content.into_any()
+                            }
+                        })),
+                    // JSON Editor Group
+                    SettingGroup::new()
+                        .title("JSON Editor")
+                        .item(SettingItem::render({
+                            let view = view.clone();
+                            move |_options, _window, cx| {
+                                let json_editor = view.read(cx).mcp_json_editor.clone();
+                                let json_error = view.read(cx).mcp_json_error.clone();
+
+                                v_flex()
+                                    .w_full()
+                                    .gap_3()
+                                    .child(
+                                        Label::new("Edit MCP servers configuration in JSON format. Supports both simplified and full formats.")
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .w_full()
+                                            .gap_2()
+                                            .child(
+                                                Button::new("load-mcp-json-btn")
+                                                    .label("Load from Config")
+                                                    .icon(IconName::ArrowDown)
+                                                    .small()
+                                                    .on_click({
+                                                        let view = view.clone();
+                                                        move |_, window, cx| {
+                                                            view.update(cx, |this, cx| {
+                                                                this.load_mcp_servers_to_json(window, cx);
+                                                            });
+                                                        }
+                                                    })
+                                            )
+                                            .child(
+                                                Button::new("validate-mcp-json-btn")
+                                                    .label("Validate")
+                                                    .icon(IconName::Check)
+                                                    .small()
+                                                    .on_click({
+                                                        let view = view.clone();
+                                                        move |_, window, cx| {
+                                                            view.update(cx, |this, cx| {
+                                                                this.validate_mcp_json(window, cx);
+                                                            });
+                                                        }
+                                                    })
+                                            )
+                                            .child(
+                                                Button::new("save-mcp-json-btn")
+                                                    .label("Save")
+                                                    .icon(IconName::ArrowUp)
+                                                    .small()
+                                                    .on_click({
+                                                        let view = view.clone();
+                                                        move |_, window, cx| {
+                                                            view.update(cx, |this, cx| {
+                                                                this.save_mcp_json(window, cx);
+                                                            });
+                                                        }
+                                                    })
+                                            )
+                                    )
+                                    .child(
+                                        Input::new(&json_editor)
+                                            .h(px(300.))
+                                            .w_full()
+                                    )
+                                    .children(json_error.map(|error| {
+                                        Label::new(error.clone())
+                                            .text_sm()
+                                            .text_color(if error.starts_with("✓") {
+                                                gpui::green()
+                                            } else {
+                                                gpui::red()
+                                            })
+                                    }))
+                                    .child(
+                                        v_flex()
+                                            .gap_2()
+                                            .p_3()
+                                            .rounded(px(6.))
+                                            .bg(cx.theme().secondary)
+                                            .border_1()
+                                            .border_color(cx.theme().border)
+                                            .child(
+                                                Label::new("Example (Simplified Format):")
+                                                    .text_xs()
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            )
+                                            .child(
+                                                Label::new(
+r#"{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"],
+      "env": {
+        "DEBUG": "true"
+      }
+    }
+  }
+}"#
+                                                )
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                            )
+                                    )
+                                    .into_any()
                             }
                         })),
                 ]),

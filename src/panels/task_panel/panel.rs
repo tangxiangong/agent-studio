@@ -847,7 +847,6 @@ impl TaskPanel {
                                 .icon(IconName::Ellipsis)
                                 .ghost()
                                 .xsmall()
-                                .on_click(|_, _, cx| cx.stop_propagation())
                                 .dropdown_menu(
                                     move |menu, _, _| {
                                         let workspace_id = workspace_id.clone();

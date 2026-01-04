@@ -141,6 +141,10 @@ pub struct ModelConfig {
     pub base_url: String,
     pub api_key: String,
     pub model_name: String,
+    /// Custom system prompts for different AI features
+    /// Keys: "doc_comment", "inline_comment", "explain", "improve"
+    #[serde(default)]
+    pub system_prompts: std::collections::HashMap<String, String>,
 }
 
 /// MCP (Model Context Protocol) server configuration

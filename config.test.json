@@ -7,33 +7,74 @@
     }
   },
   "upload_dir": ".",
-  "models": {},
-  "mcpServers": {
+  "models": {
+    "gpt-4": {
+      "enabled": true,
+      "provider": "openai",
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api_key": "nvapi-4UJrDOaVVMtyfvUdw7QVgr1SYaoWUfMV_lxtFa1acaQ-********",
+      "model_name": "minimaxai/minimax-m2.1",
+      "system_prompts": {
+        "doc_comment": "你是一个代码文档专家。为代码生成清晰、简洁的中文文档注释。重点描述代码的功能、参数、返回值和重要注意事项。只返回注释文本，不要包含任何格式标记（如 ///、/** 等）。",
+        "inline_comment": "你是一个代码文档专家。为代码生成简洁的中文单行注释。要简明扼要。只返回注释文本，不要包含任何格式标记（如 //、# 等）。",
+        "explain": "你是一个代码解释专家。用清晰简洁的中文解释代码。重点说明代码的功能、工作原理和重要概念。",
+        "improve": "你是一个代码审查专家。分析代码并用中文提供改进建议，关注：可读性、性能、最佳实践、潜在bug和可维护性。将回复格式化为编号列表。"
+      }
+    },
+    "gpt-3.5-turbo": {
+      "enabled": false,
+      "provider": "openai",
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api_key": "nvapi-4UJrDOaVVMtyfvUdw7QVgr1SYaoWUfMV_lxtFa1acaQ-********",
+      "model_name": "minimaxai/minimax-m2.1"
+    }
+  },
+  "mcp_servers": {
     "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "D:\\Code",
-        "D:\\Documents"
-      ]
+      "enabled": true,
+      "description": "MCP server: filesystem",
+      "config": {
+        "name": "filesystem",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "D:\\Code",
+          "D:\\Documents"
+        ],
+        "env": []
+      }
     },
     "github": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-github"
-      ],
-      "env": {
-        "GITHUB_TOKEN": "ghp_test_token_1234567890"
+      "enabled": true,
+      "description": "MCP server: github",
+      "config": {
+        "name": "github",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-github"
+        ],
+        "env": [
+          {
+            "name": "GITHUB_TOKEN",
+            "value": "ghp_test_token_1234567890"
+          }
+        ]
       }
     },
     "memory": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-memory"
-      ]
+      "enabled": true,
+      "description": "MCP server: memory",
+      "config": {
+        "name": "memory",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-memory"
+        ],
+        "env": []
+      }
     }
   },
   "commands": {

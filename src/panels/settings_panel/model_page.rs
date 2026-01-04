@@ -209,6 +209,7 @@ impl SettingsPanel {
                                 base_url: url,
                                 api_key: key,
                                 model_name: model,
+                                system_prompts: std::collections::HashMap::new(),
                             };
                             let name_clone = name.clone();
                             let entity = entity.clone();
@@ -350,6 +351,7 @@ impl SettingsPanel {
                                 base_url: url.to_string(),
                                 api_key: key.to_string(),
                                 model_name: model.to_string(),
+                                system_prompts: std::collections::HashMap::new(),
                             };
 
                             cx.spawn(async move |cx| {

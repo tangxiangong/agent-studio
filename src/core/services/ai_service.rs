@@ -137,6 +137,23 @@ impl AiService {
         log::info!("AI Service configuration updated");
     }
 
+    /// Get system prompt from config or use default
+    fn get_system_prompt(&self, prompt_key: &str, default_prompt: &str) -> String {
+        let config = self.config.read().unwrap();
+
+        if let Some(model_name) = &config.default_model {
+            if let Some(model_config) = config.models.get(model_name) {
+                if let Some(custom_prompt) = model_config.system_prompts.get(prompt_key) {
+                    log::debug!("Using custom system prompt for '{}'", prompt_key);
+                    return custom_prompt.clone();
+                }
+            }
+        }
+
+        log::debug!("Using default system prompt for '{}'", prompt_key);
+        default_prompt.to_string()
+    }
+
     /// Call OpenAI-compatible API with system and user prompts
     async fn call_api(
         &self,
@@ -246,8 +263,9 @@ impl AiService {
     /// # Returns
     /// Raw comment text without formatting (formatting is done by caller)
     pub async fn generate_comment(&self, code: &str, style: CommentStyle) -> Result<String> {
-        let (system_prompt, user_prompt, max_tokens) = match style {
+        let (prompt_key, default_system, user_prompt, max_tokens) = match style {
             CommentStyle::FunctionDoc => (
+                "doc_comment",
                 "You are a code documentation expert. Generate clear, concise documentation comments for code. \
                  Focus on what the code does, parameters, return values, and any important notes. \
                  Return ONLY the comment text without any formatting markers (no ///, /**, etc.).",
@@ -255,12 +273,15 @@ impl AiService {
                 Some(500),
             ),
             CommentStyle::Inline => (
+                "inline_comment",
                 "You are a code documentation expert. Generate brief, single-line inline comments that explain code. \
                  Be concise and clear. Return ONLY the comment text without any formatting markers (no //, #, etc.).",
                 format!("Generate a brief inline comment for:\n\n{}", code),
                 Some(100),
             ),
         };
+
+        let system_prompt = self.get_system_prompt(prompt_key, default_system);
 
         self.call_api(&system_prompt, &user_prompt, max_tokens)
             .await
@@ -275,13 +296,14 @@ impl AiService {
     /// # Returns
     /// Natural language explanation of the code
     pub async fn explain_code(&self, code: &str) -> Result<String> {
-        let system_prompt = "You are a code explanation expert. Explain code clearly and concisely \
+        let default_system = "You are a code explanation expert. Explain code clearly and concisely \
                             in natural language. Focus on what the code does, why it works that way, \
                             and any important concepts.";
 
+        let system_prompt = self.get_system_prompt("explain", default_system);
         let user_prompt = format!("Explain what this code does:\n\n{}", code);
 
-        self.call_api(system_prompt, &user_prompt, Some(500))
+        self.call_api(&system_prompt, &user_prompt, Some(500))
             .await
             .context("Failed to explain code")
     }
@@ -294,16 +316,17 @@ impl AiService {
     /// # Returns
     /// List of improvement suggestions as numbered list
     pub async fn suggest_improvements(&self, code: &str) -> Result<String> {
-        let system_prompt = "You are a code review expert. Analyze code and suggest improvements \
+        let default_system = "You are a code review expert. Analyze code and suggest improvements \
                             focusing on: readability, performance, best practices, potential bugs, \
                             and maintainability. Format your response as a numbered list.";
 
+        let system_prompt = self.get_system_prompt("improve", default_system);
         let user_prompt = format!(
             "Suggest improvements for this code:\n\n{}\n\nFormat as numbered list.",
             code
         );
 
-        self.call_api(system_prompt, &user_prompt, Some(800))
+        self.call_api(&system_prompt, &user_prompt, Some(800))
             .await
             .context("Failed to generate improvement suggestions")
     }

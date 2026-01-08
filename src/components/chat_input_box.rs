@@ -377,11 +377,11 @@ impl RenderOnce for ChatInputBox {
 
         v_flex()
             .w_full()
-            .gap_3()
-            .px(px(32.)) // Left and right padding for spacing
+            .gap_2()
+            .px(px(24.)) // Reduced padding for cleaner look
             .when_some(self.title, |this, title| {
                 this.child(
-                    h_flex().w_full().pb_2().child(
+                    h_flex().w_full().pb_1p5().child(
                         div()
                             .text_sm()
                             .text_color(theme.muted_foreground)
@@ -392,13 +392,13 @@ impl RenderOnce for ChatInputBox {
             .child(
                 v_flex()
                     .w_full()
-                    .gap_3()
-                    .p_4()
-                    .rounded(px(16.))
+                    .gap_2p5()
+                    .p_3()
+                    .rounded(px(12.))
                     .border_1()
                     .border_color(theme.border)
-                    .bg(theme.secondary)
-                    .shadow_lg()
+                    .bg(theme.background)
+                    .shadow_md()
                     .when_some(on_paste_callback, |this, callback| {
                         let input_state = input_state_for_paste.clone();
                         this.on_action(move |_: &crate::app::actions::Paste, window, cx| {
@@ -429,11 +429,12 @@ impl RenderOnce for ChatInputBox {
                         })
                     })
                     .child(
-                        // Top row: Pasted images, code selections, and selected files
+                        // Attachments row: Images, code selections, and files
                         h_flex()
                             .w_full()
-                            .gap_2()
+                            .gap_1p5()
                             .items_center()
+                            .flex_wrap()
                             // Render pasted images
                             .children(self.pasted_images.iter().enumerate().map(
                                 |(idx, (_image, filename))| {
@@ -443,21 +444,21 @@ impl RenderOnce for ChatInputBox {
                                     h_flex()
                                         .gap_1()
                                         .items_center()
-                                        .p_1()
-                                        .px_2()
-                                        .rounded(theme.radius)
-                                        .bg(theme.muted)
+                                        .py_0p5()
+                                        .px_1p5()
+                                        .rounded(px(6.))
+                                        .bg(theme.accent.opacity(0.1))
                                         .border_1()
-                                        .border_color(theme.border)
+                                        .border_color(theme.accent.opacity(0.3))
                                         .child(
                                             Icon::new(IconName::File)
-                                                .size(px(14.))
+                                                .size(px(13.))
                                                 .text_color(theme.accent),
                                         )
                                         .child(
                                             div()
-                                                .text_size(px(12.))
-                                                .text_color(theme.foreground)
+                                                .text_size(px(11.5))
+                                                .text_color(theme.foreground.opacity(0.85))
                                                 .child(filename.clone()),
                                         )
                                         .child(
@@ -480,13 +481,11 @@ impl RenderOnce for ChatInputBox {
                                     let on_remove = self.on_remove_code_selection.clone();
                                     let idx_clone = idx;
 
-                                    // Extract filename from path
                                     let filename = std::path::Path::new(&selection.file_path)
                                         .file_name()
                                         .and_then(|n| n.to_str())
                                         .unwrap_or(&selection.file_path);
 
-                                    // Format the display text as "filename:start_line~end_line"
                                     let display_text = if selection.start_line == selection.end_line
                                     {
                                         format!("{}:{}", filename, selection.start_line)
@@ -500,21 +499,21 @@ impl RenderOnce for ChatInputBox {
                                     h_flex()
                                         .gap_1()
                                         .items_center()
-                                        .p_1()
-                                        .px_2()
-                                        .rounded(theme.radius)
-                                        .bg(theme.muted)
+                                        .py_0p5()
+                                        .px_1p5()
+                                        .rounded(px(6.))
+                                        .bg(theme.primary.opacity(0.1))
                                         .border_1()
-                                        .border_color(theme.border)
+                                        .border_color(theme.primary.opacity(0.3))
                                         .child(
                                             Icon::new(IconName::Frame)
-                                                .size(px(14.))
-                                                .text_color(theme.accent),
+                                                .size(px(13.))
+                                                .text_color(theme.primary),
                                         )
                                         .child(
                                             div()
-                                                .text_size(px(12.))
-                                                .text_color(theme.foreground)
+                                                .text_size(px(11.5))
+                                                .text_color(theme.foreground.opacity(0.85))
                                                 .child(display_text),
                                         )
                                         .child(
@@ -540,7 +539,6 @@ impl RenderOnce for ChatInputBox {
                                     let on_remove = self.on_remove_file.clone();
                                     let idx_clone = idx;
 
-                                    // Extract filename from path
                                     let filename = std::path::Path::new(&file_path)
                                         .file_name()
                                         .and_then(|n| n.to_str())
@@ -550,21 +548,21 @@ impl RenderOnce for ChatInputBox {
                                     h_flex()
                                         .gap_1()
                                         .items_center()
-                                        .p_1()
-                                        .px_2()
-                                        .rounded(theme.radius)
-                                        .bg(theme.muted)
+                                        .py_0p5()
+                                        .px_1p5()
+                                        .rounded(px(6.))
+                                        .bg(theme.muted.opacity(0.6))
                                         .border_1()
                                         .border_color(theme.border)
                                         .child(
                                             Icon::new(IconName::File)
-                                                .size(px(14.))
-                                                .text_color(theme.accent),
+                                                .size(px(13.))
+                                                .text_color(theme.foreground.opacity(0.7)),
                                         )
                                         .child(
                                             div()
-                                                .text_size(px(12.))
-                                                .text_color(theme.foreground)
+                                                .text_size(px(11.5))
+                                                .text_color(theme.foreground.opacity(0.85))
                                                 .child(filename),
                                         )
                                         .child(
@@ -807,59 +805,54 @@ impl RenderOnce for ChatInputBox {
                                     }),
                             )
                             .child({
-                                // Determine button icon and color based on session status
-                                let (btn, is_in_progress) = match self.session_status {
+                                // Determine button icon and behavior based on session status
+                                let (icon, is_in_progress) = match self.session_status {
                                     Some(SessionStatus::InProgress) => {
-                                        ( Button::new("cancel")
-                                    .icon(Icon::new(crate::assets::Icon::SquarePause)), true)
+                                        (Icon::new(crate::assets::Icon::SquarePause), true)
                                     },
-                                    _ => ( Button::new("send")
-                                    .icon(Icon::new(IconName::ArrowUp)), false),
+                                    _ => (Icon::new(IconName::ArrowUp), false),
                                 };
 
-                                let mut btn = btn.rounded_full()
+                                let mut btn = Button::new("send-or-cancel")
+                                    .icon(icon)
+                                    .rounded_full()
                                     .small()
                                     .disabled(is_empty && !is_in_progress);
 
-                                // Set button colors based on state
-                                if is_empty && !is_in_progress {
-                                    // Disabled state: lighter/muted color
-                                    btn = btn.custom(
+                                // Apply appropriate color scheme
+                                btn = if is_empty && !is_in_progress {
+                                    // Disabled: muted appearance
+                                    btn.custom(
                                         ButtonCustomVariant::new(cx)
-                                            .color(theme.muted.opacity(0.5))
-                                            .foreground(theme.muted_foreground.opacity(0.5)),
-                                    );
+                                            .color(theme.muted.opacity(0.3))
+                                            .foreground(theme.muted_foreground.opacity(0.4)),
+                                    )
                                 } else if is_in_progress {
-                                    // InProgress state: red background with white foreground
-                                    btn = btn.custom(
+                                    // Cancel: prominent red with smooth hover
+                                    btn.custom(
                                         ButtonCustomVariant::new(cx)
                                             .color(theme.red)
                                             .foreground(theme.background)
-                                            .hover(theme.red.opacity(0.85)),
-                                    );
+                                            .hover(theme.red.opacity(0.9)),
+                                    )
                                 } else {
-                                    // Normal/Pending state: primary color with hover effect
-                                    btn = btn.custom(
+                                    // Send: primary color
+                                    btn.custom(
                                         ButtonCustomVariant::new(cx)
                                             .color(theme.primary)
                                             .foreground(theme.background)
-                                            .hover(theme.primary.opacity(0.85)),
-                                    );
-                                }
+                                            .hover(theme.primary.opacity(0.9)),
+                                    )
+                                };
 
-                                // Handle button click
+                                // Attach click handler
                                 if is_in_progress {
-                                    // When in progress, call the on_cancel callback
                                     if let Some(on_cancel_handler) = on_cancel {
                                         btn = btn.on_click(move |ev, window, cx| {
-                                            log::info!("ChatInputBox: Cancel button clicked for session");
                                             on_cancel_handler(ev, window, cx);
                                         });
-                                    } else {
-                                        log::warn!("ChatInputBox: Cannot cancel - on_cancel handler not set");
                                     }
                                 } else if let Some(handler) = on_send {
-                                    // Normal send behavior
                                     btn = btn.on_click(move |ev, window, cx| {
                                         handler(ev, window, cx);
                                     });

@@ -134,7 +134,10 @@ impl FontSizeSelector {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        Theme::global_mut(cx).font_size = px(font_size.0 as f32);
+        use crate::panels::AppSettings;
+
+        // Only update AppSettings - Theme will auto-sync via observe_global
+        AppSettings::global_mut(cx).font_size = font_size.0 as f64;
         window.refresh();
     }
 
@@ -161,8 +164,10 @@ impl FontSizeSelector {
 
 impl Render for FontSizeSelector {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        use crate::panels::AppSettings;
+
         let focus_handle = self.focus_handle.clone();
-        let font_size = cx.theme().font_size.as_f32() as i32;
+        let font_size = AppSettings::global(cx).font_size as i32;
         let radius = cx.theme().radius.as_f32() as i32;
         let scroll_show = cx.theme().scrollbar_show;
 

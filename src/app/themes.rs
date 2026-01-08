@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use gpui::{App, SharedString};
+use gpui::{App, SharedString, px};
 use gpui_component::{ActiveTheme, Theme, ThemeRegistry, scroll::ScrollbarShow};
 use serde::{Deserialize, Serialize};
 
@@ -35,7 +35,8 @@ pub fn init(cx: &mut App) {
 
     // Initialize AppSettings globally (before it was only initialized in SettingsPanel::new)
     let app_settings = state.app_settings.unwrap_or_else(AppSettings::default);
-    cx.set_global::<AppSettings>(app_settings);
+    tracing::info!("Loaded app_settings with font_size: {}", app_settings.font_size);
+    cx.set_global::<AppSettings>(app_settings.clone());
 
     if let Err(err) = ThemeRegistry::watch_dir(PathBuf::from("./themes"), cx, move |cx| {
         if let Some(theme) = ThemeRegistry::global(cx)
@@ -44,6 +45,13 @@ pub fn init(cx: &mut App) {
             .cloned()
         {
             Theme::global_mut(cx).apply_config(&theme);
+
+            // Re-sync font_size from AppSettings after applying theme config
+            // to ensure user settings take precedence over theme defaults
+            let font_size = AppSettings::global(cx).font_size;
+            tracing::info!("Re-syncing font_size from AppSettings after theme load: {}", font_size);
+            Theme::global_mut(cx).font_size = px(font_size as f32);
+            cx.refresh_windows();
         }
     }) {
         tracing::error!("Failed to watch themes directory: {}", err);
@@ -52,6 +60,11 @@ pub fn init(cx: &mut App) {
     if let Some(scrollbar_show) = state.scrollbar_show {
         Theme::global_mut(cx).scrollbar_show = scrollbar_show;
     }
+
+    // Sync font_size from AppSettings to Theme
+    tracing::info!("Initial font_size sync from AppSettings: {} -> Theme", app_settings.font_size);
+    Theme::global_mut(cx).font_size = px(app_settings.font_size as f32);
+
     cx.refresh_windows();
 
     // Save initial state to ensure all fields are persisted
@@ -63,8 +76,13 @@ pub fn init(cx: &mut App) {
     })
     .detach();
 
-    // Save state when app settings change
+    // Save state when app settings change, and sync font_size to Theme
     cx.observe_global::<AppSettings>(|cx| {
+        // Auto-sync font_size from AppSettings to Theme
+        let font_size = AppSettings::global(cx).font_size;
+        tracing::info!("AppSettings changed, syncing font_size: {} -> Theme", font_size);
+        Theme::global_mut(cx).font_size = px(font_size as f32);
+
         save_state(cx);
     })
     .detach();
@@ -73,6 +91,12 @@ pub fn init(cx: &mut App) {
         let theme_name = switch.0.clone();
         if let Some(theme_config) = ThemeRegistry::global(cx).themes().get(&theme_name).cloned() {
             Theme::global_mut(cx).apply_config(&theme_config);
+
+            // Re-sync font_size from AppSettings after applying theme config
+            // to ensure user settings take precedence over theme defaults
+            let font_size = AppSettings::global(cx).font_size;
+            tracing::info!("Re-syncing font_size from AppSettings after theme switch: {}", font_size);
+            Theme::global_mut(cx).font_size = px(font_size as f32);
         }
         cx.refresh_windows();
     });

@@ -122,6 +122,7 @@ impl SettingsPanel {
                                 },
                                 |cx: &App| AppSettings::global(cx).font_size,
                                 |val: f64, cx: &mut App| {
+                                    // Only update AppSettings - Theme will auto-sync
                                     AppSettings::global_mut(cx).font_size = val;
                                 },
                             )

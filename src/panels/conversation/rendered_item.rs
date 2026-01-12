@@ -30,7 +30,7 @@ impl RenderedItem {
     /// Try to append an AgentMessageChunk to this item (returns true if successful)
     pub fn try_append_agent_message_chunk(&mut self, chunk: ContentChunk) -> bool {
         if let RenderedItem::AgentMessage(_id, data) = self {
-            data.chunks.push(chunk);
+            data.push_chunk(chunk);
             true
         } else {
             false

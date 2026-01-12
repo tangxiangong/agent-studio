@@ -29,6 +29,8 @@ pub struct AgentMessageData {
     pub chunks: Vec<ContentChunk>,
     /// Extended metadata (agent_name, is_complete, etc.)
     pub meta: AgentMessageMeta,
+    /// Cached full text to avoid reconstruction on every render
+    cached_text: SharedString,
 }
 
 impl AgentMessageData {
@@ -37,6 +39,7 @@ impl AgentMessageData {
             session_id: session_id.into(),
             chunks: Vec::new(),
             meta: AgentMessageMeta::default(),
+            cached_text: SharedString::default(),
         }
     }
 
@@ -47,11 +50,13 @@ impl AgentMessageData {
 
     pub fn with_chunks(mut self, chunks: Vec<ContentChunk>) -> Self {
         self.chunks = chunks;
+        self.update_cache();
         self
     }
 
     pub fn add_chunk(mut self, chunk: ContentChunk) -> Self {
         self.chunks.push(chunk);
+        self.update_cache();
         self
     }
 
@@ -59,7 +64,25 @@ impl AgentMessageData {
     pub fn add_text(mut self, text: impl Into<String>) -> Self {
         self.chunks
             .push(ContentChunk::new(ContentBlock::from(text.into())));
+        self.update_cache();
         self
+    }
+
+    /// Append a chunk in place and update cache
+    pub fn push_chunk(&mut self, chunk: ContentChunk) {
+        self.chunks.push(chunk);
+        self.update_cache();
+    }
+
+    /// Append text in place and update cache
+    pub fn push_text(&mut self, text: &str) {
+        match self.chunks.last_mut().map(|chunk| &mut chunk.content) {
+            Some(ContentBlock::Text(text_content)) => text_content.text.push_str(text),
+            _ => self
+                .chunks
+                .push(ContentChunk::new(ContentBlock::from(text))),
+        }
+        self.update_cache();
     }
 
     pub fn complete(mut self) -> Self {
@@ -67,8 +90,7 @@ impl AgentMessageData {
         self
     }
 
-    /// Get combined text from all text chunks
-    pub fn full_text(&self) -> SharedString {
+    fn update_cache(&mut self) {
         let mut total_len = 0usize;
         for chunk in &self.chunks {
             if let ContentBlock::Text(text_content) = &chunk.content {
@@ -77,7 +99,8 @@ impl AgentMessageData {
         }
 
         if total_len == 0 {
-            return "".into();
+            self.cached_text = SharedString::default();
+            return;
         }
 
         let mut text = String::with_capacity(total_len);
@@ -87,7 +110,12 @@ impl AgentMessageData {
             }
         }
 
-        text.into()
+        self.cached_text = text.into();
+    }
+
+    /// Get combined text from all text chunks
+    pub fn full_text(&self) -> SharedString {
+        self.cached_text.clone()
     }
 
     /// Check if the message is complete
@@ -189,19 +217,13 @@ impl AgentMessageView {
 
     /// Add a content chunk (for streaming)
     pub fn add_chunk(&mut self, chunk: ContentChunk, cx: &mut Context<Self>) {
-        self.update_message(cx, |d| d.chunks.push(chunk));
+        self.update_message(cx, |d| d.push_chunk(chunk));
     }
 
     /// Append text to the last chunk or create a new one
     pub fn append_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
-        self.update_message(cx, |d| {
-            let text = text.into();
-
-            match d.chunks.last_mut().map(|chunk| &mut chunk.content) {
-                Some(ContentBlock::Text(text_content)) => text_content.text.push_str(&text),
-                _ => d.chunks.push(ContentChunk::new(ContentBlock::from(text))),
-            }
-        });
+        let text = text.into();
+        self.update_message(cx, |d| d.push_text(&text));
     }
 
     /// Mark the message as complete
@@ -219,6 +241,7 @@ impl AgentMessageView {
         self.update_message(cx, |d| {
             d.chunks.clear();
             d.meta.is_complete = false;
+            d.update_cache();
         });
     }
 

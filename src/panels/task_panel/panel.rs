@@ -80,7 +80,7 @@ pub struct TaskPanel {
 
 impl DockPanel for TaskPanel {
     fn title() -> &'static str {
-        "任务"
+        ""
     }
 
     fn title_key() -> Option<&'static str> {

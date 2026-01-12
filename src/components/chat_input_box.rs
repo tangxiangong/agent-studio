@@ -430,63 +430,79 @@ impl RenderOnce for ChatInputBox {
                     })
                     .child(
                         // Attachments row: Images, code selections, and files
-                        h_flex()
-                            .w_full()
-                            .gap_1p5()
-                            .items_center()
-                            .flex_wrap()
-                            // Render pasted images
-                            .children(self.pasted_images.iter().enumerate().map(
+                        {
+                            let chip_text_color = theme.foreground.opacity(0.85);
+                            let render_chip = |id_prefix: &'static str,
+                                               idx: usize,
+                                               icon_name: IconName,
+                                               label: String,
+                                               bg_color,
+                                               border_color,
+                                               icon_color,
+                                               on_remove: Option<
+                                Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>,
+                            >| {
+                                let idx_clone = idx;
+                                h_flex()
+                                    .gap_1()
+                                    .items_center()
+                                    .py_0p5()
+                                    .px_1p5()
+                                    .rounded(px(6.))
+                                    .bg(bg_color)
+                                    .border_1()
+                                    .border_color(border_color)
+                                    .child(
+                                        Icon::new(icon_name)
+                                            .size(px(13.))
+                                            .text_color(icon_color),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(11.5))
+                                            .text_color(chip_text_color)
+                                            .child(label),
+                                    )
+                                    .child(
+                                        Button::new((id_prefix, idx))
+                                            .icon(Icon::new(IconName::Close))
+                                            .ghost()
+                                            .xsmall()
+                                            .when_some(on_remove, |btn, callback| {
+                                                btn.on_click(move |_ev, window, cx| {
+                                                    callback(&idx_clone, window, cx);
+                                                })
+                                            }),
+                                    )
+                                    .into_any_element()
+                            };
+
+                            let mut attachment_chips = Vec::new();
+
+                            attachment_chips.extend(self.pasted_images.iter().enumerate().map(
                                 |(idx, (_image, filename))| {
-                                    let on_remove = self.on_remove_image.clone();
-                                    let idx_clone = idx;
-
-                                    h_flex()
-                                        .gap_1()
-                                        .items_center()
-                                        .py_0p5()
-                                        .px_1p5()
-                                        .rounded(px(6.))
-                                        .bg(theme.accent.opacity(0.1))
-                                        .border_1()
-                                        .border_color(theme.accent.opacity(0.3))
-                                        .child(
-                                            Icon::new(IconName::File)
-                                                .size(px(13.))
-                                                .text_color(theme.accent),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_size(px(11.5))
-                                                .text_color(theme.foreground.opacity(0.85))
-                                                .child(filename.clone()),
-                                        )
-                                        .child(
-                                            Button::new(("remove-image", idx))
-                                                .icon(Icon::new(IconName::Close))
-                                                .ghost()
-                                                .xsmall()
-                                                .when_some(on_remove, |btn, callback| {
-                                                    btn.on_click(move |_ev, window, cx| {
-                                                        callback(&idx_clone, window, cx);
-                                                    })
-                                                }),
-                                        )
-                                        .into_any_element()
+                                    render_chip(
+                                        "remove-image",
+                                        idx,
+                                        IconName::File,
+                                        filename.clone(),
+                                        theme.accent.opacity(0.1),
+                                        theme.accent.opacity(0.3),
+                                        theme.accent,
+                                        self.on_remove_image.clone(),
+                                    )
                                 },
-                            ))
-                            // Render code selections
-                            .children(self.code_selections.iter().enumerate().map(
-                                |(idx, selection)| {
-                                    let on_remove = self.on_remove_code_selection.clone();
-                                    let idx_clone = idx;
+                            ));
 
+                            attachment_chips.extend(self.code_selections.iter().enumerate().map(
+                                |(idx, selection)| {
                                     let filename = std::path::Path::new(&selection.file_path)
                                         .file_name()
                                         .and_then(|n| n.to_str())
                                         .unwrap_or(&selection.file_path);
 
-                                    let display_text = if selection.start_line == selection.end_line
+                                    let display_text = if selection.start_line
+                                        == selection.end_line
                                     {
                                         format!("{}:{}", filename, selection.start_line)
                                     } else {
@@ -496,90 +512,50 @@ impl RenderOnce for ChatInputBox {
                                         )
                                     };
 
-                                    h_flex()
-                                        .gap_1()
-                                        .items_center()
-                                        .py_0p5()
-                                        .px_1p5()
-                                        .rounded(px(6.))
-                                        .bg(theme.primary.opacity(0.1))
-                                        .border_1()
-                                        .border_color(theme.primary.opacity(0.3))
-                                        .child(
-                                            Icon::new(IconName::Frame)
-                                                .size(px(13.))
-                                                .text_color(theme.primary),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_size(px(11.5))
-                                                .text_color(theme.foreground.opacity(0.85))
-                                                .child(display_text),
-                                        )
-                                        .child(
-                                            Button::new(("remove-code-selection", idx))
-                                                .icon(Icon::new(IconName::Close))
-                                                .ghost()
-                                                .xsmall()
-                                                .when_some(on_remove, |btn, callback| {
-                                                    btn.on_click(move |_ev, window, cx| {
-                                                        callback(&idx_clone, window, cx);
-                                                    })
-                                                }),
-                                        )
-                                        .into_any_element()
+                                    render_chip(
+                                        "remove-code-selection",
+                                        idx,
+                                        IconName::Frame,
+                                        display_text,
+                                        theme.primary.opacity(0.1),
+                                        theme.primary.opacity(0.3),
+                                        theme.primary,
+                                        self.on_remove_code_selection.clone(),
+                                    )
                                 },
-                            ))
-                            // Render selected files
-                            .children(
+                            ));
+
+                            attachment_chips.extend(
                                 self.selected_files
                                     .into_iter()
                                     .enumerate()
                                     .map(|(idx, file_path)| {
-                                        let on_remove = self.on_remove_file.clone();
-                                        let idx_clone = idx;
-
                                         let filename = std::path::Path::new(&file_path)
                                             .file_name()
                                             .and_then(|n| n.to_str())
                                             .map(|s| s.to_string())
-                                            .unwrap_or(file_path.clone());
+                                            .unwrap_or(file_path);
 
-                                        h_flex()
-                                            .gap_1()
-                                            .items_center()
-                                            .py_0p5()
-                                            .px_1p5()
-                                            .rounded(px(6.))
-                                            .bg(theme.muted.opacity(0.6))
-                                            .border_1()
-                                            .border_color(theme.border)
-                                            .child(
-                                                Icon::new(IconName::File)
-                                                    .size(px(13.))
-                                                    .text_color(theme.foreground.opacity(0.7)),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_size(px(11.5))
-                                                    .text_color(theme.foreground.opacity(0.85))
-                                                    .child(filename),
-                                            )
-                                            .child(
-                                                Button::new(("remove-file", idx))
-                                                    .icon(Icon::new(IconName::Close))
-                                                    .ghost()
-                                                    .xsmall()
-                                                    .when_some(on_remove, |btn, callback| {
-                                                        btn.on_click(move |_ev, window, cx| {
-                                                            callback(&idx_clone, window, cx);
-                                                        })
-                                                    }),
-                                            )
-                                            .into_any_element()
-                                    })
-                                    .collect::<Vec<_>>(),
-                            ),
+                                        render_chip(
+                                            "remove-file",
+                                            idx,
+                                            IconName::File,
+                                            filename,
+                                            theme.muted.opacity(0.6),
+                                            theme.border,
+                                            theme.foreground.opacity(0.7),
+                                            self.on_remove_file.clone(),
+                                        )
+                                    }),
+                            );
+
+                            h_flex()
+                                .w_full()
+                                .gap_1p5()
+                                .items_center()
+                                .flex_wrap()
+                                .children(attachment_chips)
+                        },
                     )
                     .child(
                         // Textarea (multi-line input)

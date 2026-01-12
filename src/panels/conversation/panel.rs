@@ -91,16 +91,27 @@ impl ConversationPanel {
         self.session_id.clone()
     }
 
-    fn new(_window: &mut Window, cx: &mut App) -> Self {
+    fn new(window: &mut Window, cx: &mut App) -> Self {
         log::info!("🔧 Initializing ConversationPanel (new)");
+        Self::new_internal(None, window, cx)
+    }
+
+    fn new_for_session(session_id: String, window: &mut Window, cx: &mut App) -> Self {
+        log::info!(
+            "🔧 Initializing ConversationPanel for session: {}",
+            session_id
+        );
+        Self::new_internal(Some(session_id), window, cx)
+    }
+
+    fn new_internal(
+        session_id: Option<String>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
-        let input_state = cx.new(|cx| {
-            InputState::new(_window, cx)
-                .auto_grow(1, 3)
-                .soft_wrap(true)
-                .placeholder("Type a message...")
-        });
+        let input_state = Self::create_input_state(window, cx);
         let rendered_items = Vec::new();
         let next_index = rendered_items.len();
 
@@ -108,7 +119,7 @@ impl ConversationPanel {
             focus_handle,
             rendered_items,
             next_index,
-            session_id: None,
+            session_id,
             scroll_handle,
             input_state,
             pasted_images: Vec::new(),
@@ -117,31 +128,13 @@ impl ConversationPanel {
         }
     }
 
-    fn new_for_session(session_id: String, window: &mut Window, cx: &mut App) -> Self {
-        log::info!(
-            "🔧 Initializing ConversationPanel for session: {}",
-            session_id
-        );
-        let focus_handle = cx.focus_handle();
-        let scroll_handle = ScrollHandle::new();
-        let input_state = cx.new(|cx| {
+    fn create_input_state(window: &mut Window, cx: &mut App) -> Entity<InputState> {
+        cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(1, 3)
                 .soft_wrap(true)
                 .placeholder("Type a message...")
-        });
-
-        Self {
-            focus_handle,
-            rendered_items: Vec::new(),
-            next_index: 0,
-            session_id: Some(session_id),
-            scroll_handle,
-            input_state,
-            pasted_images: Vec::new(),
-            code_selections: Vec::new(),
-            session_status: None,
-        }
+        })
     }
 
     /// Load historical messages for a session
@@ -817,60 +810,17 @@ impl ConversationPanel {
                     handled = true;
 
                     cx.spawn_in(window, async move |this, cx| {
-                        // Write image to temp file first (to get filename)
-                        match crate::utils::file::write_image_to_temp_file(&image).await {
-                            Ok(temp_path) => {
-                                log::info!("Image written to temp file: {}", temp_path);
-
-                                // Extract filename from path
-                                let filename = std::path::Path::new(&temp_path)
-                                    .file_name()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or("image.png")
-                                    .to_string();
-
-                                // Read the file and convert to base64 (using std::fs for sync read)
-                                match std::fs::read(&temp_path) {
-                                    Ok(bytes) => {
-                                        use base64::Engine;
-                                        let base64_data = base64::engine::general_purpose::STANDARD
-                                            .encode(&bytes);
-
-                                        // Determine MIME type from format
-                                        let mime_type = match image.format {
-                                            gpui::ImageFormat::Png => "image/png",
-                                            gpui::ImageFormat::Jpeg => "image/jpeg",
-                                            gpui::ImageFormat::Webp => "image/webp",
-                                            gpui::ImageFormat::Gif => "image/gif",
-                                            gpui::ImageFormat::Svg => "image/svg+xml",
-                                            gpui::ImageFormat::Bmp => "image/bmp",
-                                            gpui::ImageFormat::Tiff => "image/tiff",
-                                            gpui::ImageFormat::Ico => "image/icon",
-                                        }
-                                        .to_string();
-
-                                        // Create ImageContent
-                                        let image_content =
-                                            ImageContent::new(base64_data, mime_type);
-
-                                        // Add to pasted_images
-                                        _ = cx.update(move |_window, cx| {
-                                            let _ = this.update(cx, |this, cx| {
-                                                this.pasted_images.push((image_content, filename));
-                                                cx.notify();
-                                            });
-                                        });
-
-                                        // Optionally delete the temp file after reading
-                                        let _ = std::fs::remove_file(&temp_path);
-                                    }
-                                    Err(e) => {
-                                        log::error!("Failed to read image file: {}", e);
-                                    }
-                                }
+                        match crate::utils::clipboard::image_to_content(image).await {
+                            Ok((image_content, filename)) => {
+                                _ = cx.update(move |_window, cx| {
+                                    let _ = this.update(cx, |this, cx| {
+                                        this.pasted_images.push((image_content, filename));
+                                        cx.notify();
+                                    });
+                                });
                             }
                             Err(e) => {
-                                log::error!("Failed to write image to temp file: {}", e);
+                                log::error!("Failed to process pasted image: {}", e);
                             }
                         }
                     })

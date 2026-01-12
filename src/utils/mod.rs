@@ -1,3 +1,4 @@
+pub mod clipboard;
 pub mod file;
 pub mod time;
 pub mod tool_call;

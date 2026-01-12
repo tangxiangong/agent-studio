@@ -414,6 +414,32 @@ impl WelcomePanel {
         self.selected_mcps.sort();
     }
 
+    fn on_mcp_servers_changed(&mut self) {
+        self.available_mcps.sort_by(|a, b| a.0.cmp(&b.0));
+        self.sync_mcp_selection_with_available();
+        self.pending_mcp_session_recreate = self.current_agent_name.is_some();
+    }
+
+    fn upsert_mcp_server(&mut self, name: &str, config: &McpServerConfig) {
+        if let Some(entry) = self
+            .available_mcps
+            .iter_mut()
+            .find(|(server_name, _)| server_name == name)
+        {
+            *entry = (name.to_string(), config.clone());
+        } else {
+            self.available_mcps.push((name.to_string(), config.clone()));
+        }
+
+        self.on_mcp_servers_changed();
+    }
+
+    fn remove_mcp_server(&mut self, name: &str) {
+        self.available_mcps
+            .retain(|(server_name, _)| server_name != name);
+        self.on_mcp_servers_changed();
+    }
+
     fn collect_mcp_servers_from_selection(
         available_mcps: &[(String, McpServerConfig)],
         selected_mcps: &[String],
@@ -506,46 +532,19 @@ impl WelcomePanel {
                 // Force full refresh
                 self.has_agents = false;
                 self.available_mcps = config.mcp_servers.clone().into_iter().collect();
-                self.available_mcps.sort_by(|a, b| a.0.cmp(&b.0));
-                self.sync_mcp_selection_with_available();
-                self.pending_mcp_session_recreate = self.current_agent_name.is_some();
+                self.on_mcp_servers_changed();
             }
             AgentConfigEvent::McpServerAdded { name, config } => {
                 log::info!("[WelcomePanel] MCP server added: {}", name);
-                if let Some(entry) = self
-                    .available_mcps
-                    .iter_mut()
-                    .find(|(server_name, _)| server_name == name)
-                {
-                    *entry = (name.clone(), config.clone());
-                } else {
-                    self.available_mcps.push((name.clone(), config.clone()));
-                }
-                self.available_mcps.sort_by(|a, b| a.0.cmp(&b.0));
-                self.sync_mcp_selection_with_available();
-                self.pending_mcp_session_recreate = self.current_agent_name.is_some();
+                self.upsert_mcp_server(name, config);
             }
             AgentConfigEvent::McpServerUpdated { name, config } => {
                 log::info!("[WelcomePanel] MCP server updated: {}", name);
-                if let Some(entry) = self
-                    .available_mcps
-                    .iter_mut()
-                    .find(|(server_name, _)| server_name == name)
-                {
-                    *entry = (name.clone(), config.clone());
-                } else {
-                    self.available_mcps.push((name.clone(), config.clone()));
-                }
-                self.available_mcps.sort_by(|a, b| a.0.cmp(&b.0));
-                self.sync_mcp_selection_with_available();
-                self.pending_mcp_session_recreate = self.current_agent_name.is_some();
+                self.upsert_mcp_server(name, config);
             }
             AgentConfigEvent::McpServerRemoved { name } => {
                 log::info!("[WelcomePanel] MCP server removed: {}", name);
-                self.available_mcps
-                    .retain(|(server_name, _)| server_name != name);
-                self.sync_mcp_selection_with_available();
-                self.pending_mcp_session_recreate = self.current_agent_name.is_some();
+                self.remove_mcp_server(name);
             }
             // Model and Command events don't affect WelcomePanel
             AgentConfigEvent::ModelAdded { .. }
@@ -1301,68 +1300,21 @@ impl WelcomePanel {
                     handled = true;
 
                     cx.spawn_in(window, async move |this, cx| {
-                        // Write image to temp file first (to get filename)
-                        match crate::utils::file::write_image_to_temp_file(&image).await {
-                            Ok(temp_path) => {
-                                log::info!("Image written to temp file: {}", temp_path);
-
-                                // Extract filename from path
-                                let filename = std::path::Path::new(&temp_path)
-                                    .file_name()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or("image.png")
-                                    .to_string();
-
-                                // Read the file and convert to base64 (using std::fs for sync read)
-                                match std::fs::read(&temp_path) {
-                                    Ok(bytes) => {
-                                        use base64::Engine;
-                                        let base64_data = base64::engine::general_purpose::STANDARD
-                                            .encode(&bytes);
-
-                                        // Determine MIME type from format
-                                        let mime_type = match image.format {
-                                            gpui::ImageFormat::Png => "image/png",
-                                            gpui::ImageFormat::Jpeg => "image/jpeg",
-                                            gpui::ImageFormat::Webp => "image/webp",
-                                            gpui::ImageFormat::Gif => "image/gif",
-                                            gpui::ImageFormat::Svg => "image/svg+xml",
-                                            gpui::ImageFormat::Bmp => "image/bmp",
-                                            gpui::ImageFormat::Tiff => "image/tiff",
-                                            gpui::ImageFormat::Ico => "image/icon",
-                                        }
-                                        .to_string();
-
-                                        // Create ImageContent
-                                        let image_content =
-                                            ImageContent::new(base64_data, mime_type);
-
-                                        // Add to pasted_images
-                                        _ = cx.update(move |_window, cx| {
-                                            let _ = this.update(cx, |this, cx| {
-                                                this.pasted_images.push((image_content, filename));
-                                                cx.notify();
-                                            });
-                                        });
-
-                                        // Optionally delete the temp file after reading
-                                        let _ = std::fs::remove_file(&temp_path);
-                                    }
-                                    Err(e) => {
-                                        log::error!("Failed to read image file: {}", e);
-                                    }
-                                }
+                        match crate::utils::clipboard::image_to_content(image).await {
+                            Ok((image_content, filename)) => {
+                                _ = cx.update(move |_window, cx| {
+                                    let _ = this.update(cx, |this, cx| {
+                                        this.pasted_images.push((image_content, filename));
+                                        cx.notify();
+                                    });
+                                });
                             }
                             Err(e) => {
-                                log::error!("Failed to write image to temp file: {}", e);
+                                log::error!("Failed to process pasted image: {}", e);
                             }
                         }
                     })
                     .detach();
-                }
-                if let ClipboardEntry::String(text) = entry {
-                    log::info!("Pasted text: {}", text.text());
-                    handled = false;
                 }
             }
         }

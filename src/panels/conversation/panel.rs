@@ -836,7 +836,7 @@ impl ConversationPanel {
     fn send_message(
         &self,
         text: String,
-        images: &Vec<(ImageContent, String)>,
+        images: Vec<(ImageContent, String)>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -855,7 +855,7 @@ impl ConversationPanel {
         let action = SendMessageToSession {
             session_id: session_id.clone(),
             message: text,
-            images: images.clone(),
+            images,
         };
 
         window.dispatch_action(Box::new(action), cx);
@@ -905,7 +905,7 @@ impl ConversationPanel {
     }
 
     /// Render the loading skeleton when session is in progress
-    fn render_loading_skeleton(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_loading_skeleton(&self) -> impl IntoElement {
         v_flex().gap_3().w_full().child(
             h_flex()
                 .items_start()
@@ -1155,7 +1155,7 @@ impl Render for ConversationPanel {
         // Add loading skeleton when session is in progress
         if let Some(status_info) = &self.session_status {
             if status_info.status == SessionStatus::InProgress {
-                children = children.child(self.render_loading_skeleton(cx));
+                children = children.child(self.render_loading_skeleton());
             }
         }
 
@@ -1214,7 +1214,6 @@ impl Render for ConversationPanel {
                             .session_status(
                                 self.session_status.as_ref().map(|info| info.status.clone()),
                             )
-                            .session_id(self.session_id.clone())
                             .on_paste(move |window, cx| {
                                 entity.update(cx, |this, cx| {
                                     this.handle_paste(window, cx);
@@ -1243,10 +1242,10 @@ impl Render for ConversationPanel {
                                     });
 
                                     // Send the message with images if any
-                                    this.send_message(text, &this.pasted_images, window, cx);
+                                    let images = std::mem::take(&mut this.pasted_images);
+                                    this.send_message(text, images, window, cx);
 
                                     // Clear pasted images and code selections after sending
-                                    this.pasted_images.clear();
                                     this.code_selections.clear();
                                     cx.notify();
                                 }

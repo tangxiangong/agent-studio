@@ -512,14 +512,6 @@ impl WelcomePanel {
             }
             AgentConfigEvent::AgentRemoved { name } => {
                 log::info!("[WelcomePanel] Agent removed: {}", name);
-                // Check if the removed agent was selected
-                let selected_agent = self.agent_select.read(cx).selected_value().cloned();
-                if let Some(selected) = selected_agent {
-                    if &selected == name {
-                        // Clear current selection
-                        self.has_agents = false;
-                    }
-                }
                 // Force refresh to remove deleted agent
                 self.has_agents = false;
             }
@@ -1263,17 +1255,17 @@ impl WelcomePanel {
             });
 
             // Dispatch CreateTaskFromWelcome action with images
+            let images = std::mem::take(&mut self.pasted_images);
             let action = CreateTaskFromWelcome {
-                task_input: task_name.clone(),
-                agent_name: agent_name.clone(),
+                task_input: task_name,
+                agent_name,
                 mode,
-                images: self.pasted_images.clone(),
+                images,
             };
 
             window.dispatch_action(Box::new(action), cx);
 
             // Clear pasted images and code selections after dispatching action
-            self.pasted_images.clear();
             self.code_selections.clear();
         }
     }

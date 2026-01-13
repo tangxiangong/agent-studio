@@ -6,7 +6,7 @@ use std::{rc::Rc, sync::Arc};
 
 use gpui_component::{
     ActiveTheme, Disableable, Icon, IconName, Sizable,
-    button::{Button, ButtonCustomVariant, ButtonVariants},
+    button::{Button, ButtonCustomVariant},
     h_flex,
     input::{Input, InputState},
     popover::Popover,
@@ -81,9 +81,7 @@ pub struct ChatInputBox {
     mode_select: Option<Entity<SelectState<Vec<ModeSelectItem>>>>,
     model_select: Option<Entity<SelectState<Vec<ModelSelectItem>>>>,
     agent_select: Option<Entity<SelectState<Vec<AgentItem>>>>,
-    session_select: Option<Entity<SelectState<Vec<String>>>>,
     agent_status_text: Option<String>,
-    on_new_session: Option<Box<dyn Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static>>,
     pasted_images: Vec<(ImageContent, String)>, // (ImageContent, filename for display)
     code_selections: Vec<AddCodeSelection>,     // Code selections from editor
     selected_files: Vec<String>,                // Selected file paths from file picker
@@ -92,7 +90,6 @@ pub struct ChatInputBox {
     on_remove_file: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
     on_paste: Option<Rc<dyn Fn(&mut Window, &mut App) + 'static>>,
     session_status: Option<SessionStatus>, // Session status for button state
-    session_id: Option<String>,            // Session ID for cancel action
     file_suggestions: Vec<FileItem>,
     on_file_select: Option<Box<dyn Fn(&FileItem, &mut Window, &mut App) + 'static>>,
     /// Command suggestions to display
@@ -121,9 +118,7 @@ impl ChatInputBox {
             mode_select: None,
             model_select: None,
             agent_select: None,
-            session_select: None,
             agent_status_text: None,
-            on_new_session: None,
             pasted_images: Vec::new(),
             code_selections: Vec::new(),
             selected_files: Vec::new(),
@@ -132,7 +127,6 @@ impl ChatInputBox {
             on_remove_file: None,
             on_paste: None,
             session_status: None,
-            session_id: None,
             file_suggestions: Vec::new(),
             on_file_select: None,
             command_suggestions: Vec::new(),
@@ -189,21 +183,6 @@ impl ChatInputBox {
     /// Set the agent status text shown next to the agent select
     pub fn agent_status_text(mut self, text: impl Into<String>) -> Self {
         self.agent_status_text = Some(text.into());
-        self
-    }
-
-    /// Set the session select state
-    pub fn session_select(mut self, select: Entity<SelectState<Vec<String>>>) -> Self {
-        self.session_select = Some(select);
-        self
-    }
-
-    /// Set a callback for when the new session button is clicked
-    pub fn on_new_session<F>(mut self, callback: F) -> Self
-    where
-        F: Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
-    {
-        self.on_new_session = Some(Box::new(callback));
         self
     }
 
@@ -264,12 +243,6 @@ impl ChatInputBox {
     /// Set the session status (affects send button appearance)
     pub fn session_status(mut self, status: Option<SessionStatus>) -> Self {
         self.session_status = status;
-        self
-    }
-
-    /// Set the session ID (required for cancel action)
-    pub fn session_id(mut self, session_id: Option<String>) -> Self {
-        self.session_id = session_id;
         self
     }
 
@@ -345,6 +318,9 @@ impl RenderOnce for ChatInputBox {
         });
         let input_value = self.input_state.read(cx).value();
         let is_empty = input_value.trim().is_empty();
+        let has_attachments = !self.pasted_images.is_empty()
+            || !self.code_selections.is_empty()
+            || !self.selected_files.is_empty();
 
         // Get theme after use_keyed_state to avoid borrow conflicts
         let theme = cx.theme();
@@ -428,9 +404,9 @@ impl RenderOnce for ChatInputBox {
                             }
                         })
                     })
-                    .child(
-                        // Attachments row: Images, code selections, and files
-                        {
+                    .when(has_attachments, |this| {
+                        this.child({
+                            // Attachments row: Images, code selections, and files
                             let chip_text_color = theme.foreground.opacity(0.85);
                             let render_chip = |id_prefix: &'static str,
                                                idx: usize,
@@ -555,8 +531,8 @@ impl RenderOnce for ChatInputBox {
                                 .items_center()
                                 .flex_wrap()
                                 .children(attachment_chips)
-                        },
-                    )
+                        })
+                    })
                     .child(
                         // Textarea (multi-line input)
                         {

@@ -45,7 +45,7 @@ pub use app::{
         ShowPanelInfo, ShowToolCallDetail, ShowWelcomePanel, Tab, TabPrev, TestAction,
         ToggleDockToggleButton, TogglePanelVisible, ToggleSearch, UpdateAgent,
     },
-    app_menus, menu, themes, title_bar,
+    app_menus, menu, system_tray, themes, title_bar,
 };
 use gpui::{
     AnyView, App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Pixels, Render,

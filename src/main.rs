@@ -13,6 +13,17 @@ fn main() {
     app.run(move |cx| {
         agentx::init(cx);
 
+        // Initialize system tray
+        match agentx::system_tray::SystemTray::new() {
+            Ok(tray) => {
+                agentx::system_tray::setup_tray_event_handler(tray, cx);
+                log::info!("System tray initialized successfully");
+            }
+            Err(e) => {
+                log::error!("Failed to initialize system tray: {}", e);
+            }
+        }
+
         // Get session_bus and permission_bus from global AppState
         let session_bus = agentx::AppState::global(cx).session_bus.clone();
         let permission_bus = agentx::AppState::global(cx).permission_bus.clone();

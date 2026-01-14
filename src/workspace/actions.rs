@@ -344,8 +344,11 @@ impl DockWorkspace {
                 PanelKind::Terminal { working_directory } => {
                     self.add_terminal_panel_to(working_directory.clone(), *placement, window, cx);
                 }
+                PanelKind::CodeEditor { working_directory } => {
+                    self.add_code_editor_panel_to(working_directory.clone(), *placement, window, cx);
+                }
                 PanelKind::Welcome { workspace_id } => {
-                    self.show_welcome_panel(workspace_id.clone(), window, cx);
+                    self.add_welcome_panel_to(workspace_id.clone(), *placement, window, cx);
                 }
                 PanelKind::ToolCallDetail {
                     tool_call_id: _,
@@ -362,6 +365,14 @@ impl DockWorkspace {
                     self.add_terminal_panel_to(
                         working_directory.clone(),
                         DockPlacement::Bottom,
+                        window,
+                        cx,
+                    );
+                }
+                PanelKind::CodeEditor { working_directory } => {
+                    self.add_code_editor_panel_to(
+                        working_directory.clone(),
+                        DockPlacement::Right,
                         window,
                         cx,
                     );
@@ -396,14 +407,69 @@ impl DockWorkspace {
 
             let panel = Arc::new(Self::panel_for_session(session_id, window, cx));
             self.dock_area.update(cx, |dock_area, cx| {
+                // Check if dock is open BEFORE adding panel
+                let was_dock_open = dock_area.is_dock_open(placement, cx);
+
+                // Add panel to dock
                 dock_area.add_panel(panel, placement, None, window, cx);
+
+                // If dock was closed, toggle it to open it
+                if !was_dock_open {
+                    dock_area.toggle_dock(placement, window, cx);
+                    log::debug!("Auto-expanded {:?} dock for conversation panel", placement);
+                }
             });
             return;
         }
 
         let panel = Arc::new(DockPanelContainer::panel::<ConversationPanel>(window, cx));
         self.dock_area.update(cx, |dock_area, cx| {
+            // Check if dock is open BEFORE adding panel
+            let was_dock_open = dock_area.is_dock_open(placement, cx);
+
+            // Add panel to dock
             dock_area.add_panel(panel, placement, None, window, cx);
+
+            // If dock was closed, toggle it to open it
+            if !was_dock_open {
+                dock_area.toggle_dock(placement, window, cx);
+                log::debug!("Auto-expanded {:?} dock for conversation panel", placement);
+            }
+        });
+    }
+
+    fn add_welcome_panel_to(
+        &mut self,
+        workspace_id: Option<String>,
+        placement: DockPlacement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Create WelcomePanel with optional workspace_id
+        let panel = if let Some(workspace_id) = workspace_id {
+            Arc::new(DockPanelContainer::panel_for_workspace(workspace_id, window, cx))
+        } else {
+            Arc::new(DockPanelContainer::panel::<WelcomePanel>(window, cx))
+        };
+
+        self.dock_area.update(cx, |dock_area, cx| {
+            // Check if dock is open BEFORE adding panel
+            let was_dock_open = dock_area.is_dock_open(placement, cx);
+
+            // Add panel to dock
+            dock_area.add_panel(panel, placement, None, window, cx);
+            // Collapse right and bottom docks if they are open
+            if dock_area.is_dock_open(DockPlacement::Right, cx) {
+                dock_area.toggle_dock(DockPlacement::Right, window, cx);
+            }
+            if dock_area.is_dock_open(DockPlacement::Bottom, cx) {
+                dock_area.toggle_dock(DockPlacement::Bottom, window, cx);
+            }
+            // If dock was closed, toggle it to open it
+            if !was_dock_open {
+                dock_area.toggle_dock(placement, window, cx);
+                log::debug!("Auto-expanded {:?} dock for welcome panel", placement);
+            }
         });
     }
 
@@ -429,7 +495,53 @@ impl DockWorkspace {
         };
 
         self.dock_area.update(cx, |dock_area, cx| {
+            // Check if dock is open BEFORE adding panel
+            let was_dock_open = dock_area.is_dock_open(placement, cx);
+
+            // Add panel to dock
             dock_area.add_panel(panel, placement, None, window, cx);
+
+            // If dock was closed, toggle it to open it
+            if !was_dock_open {
+                dock_area.toggle_dock(placement, window, cx);
+                log::debug!("Auto-expanded {:?} dock for terminal panel", placement);
+            }
+        });
+    }
+
+    fn add_code_editor_panel_to(
+        &mut self,
+        working_directory: Option<std::path::PathBuf>,
+        placement: DockPlacement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let panel = if let Some(working_directory) = working_directory {
+            // 使用指定的工作目录创建代码编辑器面板
+            Arc::new(DockPanelContainer::panel_for_code_editor_with_cwd(
+                working_directory,
+                window,
+                cx,
+            ))
+        } else {
+            // 使用默认工作目录创建代码编辑器面板
+            Arc::new(DockPanelContainer::panel::<crate::CodeEditorPanel>(
+                window, cx,
+            ))
+        };
+
+        self.dock_area.update(cx, |dock_area, cx| {
+            // Check if dock is open BEFORE adding panel
+            let was_dock_open = dock_area.is_dock_open(placement, cx);
+
+            // Add panel to dock
+            dock_area.add_panel(panel, placement, None, window, cx);
+
+            // If dock was closed, toggle it to open it
+            if !was_dock_open {
+                dock_area.toggle_dock(placement, window, cx);
+                log::debug!("Auto-expanded {:?} dock for code editor panel", placement);
+            }
         });
     }
 
@@ -626,8 +738,42 @@ impl DockWorkspace {
 
         let dock_area = self.dock_area.clone();
 
+        // Get workspace_id from action or use active workspace
+        let target_workspace_id = action.workspace_id.clone();
+
         cx.spawn_in(window, async move |_this, window| {
-            // Step 1: Get or reuse session
+            // Step 1: Get target workspace (from action) or active workspace
+            let workspace = if let Some(ws_id) = target_workspace_id {
+                log::info!("Using specified workspace: {}", ws_id);
+                match workspace_service.get_workspace(&ws_id).await {
+                    Some(ws) => ws,
+                    None => {
+                        log::error!("Specified workspace not found: {}", ws_id);
+                        return;
+                    }
+                }
+            } else {
+                log::info!("Using active workspace");
+                match workspace_service.get_active_workspace().await {
+                    Some(ws) => ws,
+                    None => {
+                        log::error!("No active workspace available");
+                        return;
+                    }
+                }
+            };
+
+            let workspace_id = workspace.id.clone();
+            let workspace_cwd = workspace.path.clone();
+
+            log::info!(
+                "Creating task in workspace: {} ({}), cwd: {:?}",
+                workspace.name,
+                workspace_id,
+                workspace_cwd
+            );
+
+            // Step 2: Get or reuse session
             // IMPORTANT: Reuse welcome_session if it exists (created by WelcomePanel)
             // This ensures we use the same agent process that's already running
             let session_id = if let Some(ws) = welcome_session {
@@ -638,7 +784,7 @@ impl DockWorkspace {
                 );
                 ws.session_id
             } else {
-                // No welcome session, create new one
+                // No welcome session, create new one with workspace cwd
                 let mcp_servers = if let Some(service) = agent_config_service {
                     service
                         .list_mcp_servers()
@@ -650,8 +796,15 @@ impl DockWorkspace {
                 } else {
                     Vec::new()
                 };
+
+                log::info!(
+                    "Creating new session for agent '{}' with cwd: {:?}",
+                    agent_name,
+                    workspace_cwd
+                );
+
                 match agent_service
-                    .create_session_with_mcp(&agent_name, mcp_servers)
+                    .create_session_with_mcp_and_cwd(&agent_name, mcp_servers, workspace_cwd)
                     .await
                 {
                     Ok(session_id) => {
@@ -669,17 +822,7 @@ impl DockWorkspace {
                 }
             };
 
-            // Step 2: Create WorkspaceTask
-            // Get active workspace
-            let workspace = match workspace_service.get_active_workspace().await {
-                Some(ws) => ws,
-                None => {
-                    log::error!("No active workspace available");
-                    return;
-                }
-            };
-
-            let workspace_id = workspace.id.clone();
+            // Step 3: Create WorkspaceTask
 
             // Create task in workspace
             let task = match workspace_service

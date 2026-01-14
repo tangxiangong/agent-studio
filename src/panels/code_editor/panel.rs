@@ -3,7 +3,7 @@ use std::{path::PathBuf, rc::Rc, str::FromStr};
 use autocorrect::ignorer::Ignorer;
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme, IconName, Sizable, StyledExt, WindowExt,
+    ActiveTheme, Icon, IconName, Sizable, StyledExt, WindowExt,
     button::{Button, ButtonVariants as _},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language},
@@ -32,6 +32,9 @@ pub struct CodeEditorPanel {
     lsp_store: CodeEditorPanelLspStore,
     current_file_path: Option<PathBuf>,
     has_opened_file: bool,
+    workspace_id: Option<String>,
+    workspace_name: Option<String>,
+    working_directory: PathBuf,
     _subscriptions: Vec<Subscription>,
     _lint_task: Task<()>,
 }
@@ -56,10 +59,18 @@ impl crate::panels::dock_panel::DockPanel for CodeEditorPanel {
 
 impl CodeEditorPanel {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self::new(window, cx))
+        cx.new(|cx| Self::new(window, None, cx))
     }
 
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn view_with_working_dir(
+        window: &mut Window,
+        working_dir: Option<PathBuf>,
+        cx: &mut App,
+    ) -> Entity<Self> {
+        cx.new(|cx| Self::new(window, working_dir, cx))
+    }
+
+    pub fn new(window: &mut Window, working_dir: Option<PathBuf>, cx: &mut Context<Self>) -> Self {
         let default_language = Language::from_str("rust");
         let lsp_store = CodeEditorPanelLspStore::new();
 
@@ -87,8 +98,8 @@ impl CodeEditorPanel {
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
 
         let tree_state = cx.new(|cx| TreeState::new(cx));
-        let working_dir = AppState::global(cx).current_working_dir().clone();
-        Self::load_files(tree_state.clone(), working_dir, cx);
+        let working_dir = working_dir.unwrap_or_else(|| AppState::global(cx).current_working_dir().clone());
+        Self::load_files(tree_state.clone(), working_dir.clone(), cx);
 
         let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
             this.lint_document(cx);
@@ -106,6 +117,9 @@ impl CodeEditorPanel {
             lsp_store,
             current_file_path: None,
             has_opened_file: false,
+            workspace_id: None,
+            workspace_name: None,
+            working_directory: working_dir,
             _subscriptions,
             _lint_task: Task::ready(()),
         }
@@ -120,6 +134,21 @@ impl CodeEditorPanel {
             });
         })
         .detach();
+    }
+
+    /// Get the workspace_id (if available)
+    pub fn workspace_id(&self) -> Option<String> {
+        self.workspace_id.clone()
+    }
+
+    /// Get the workspace_name (if available)
+    pub fn workspace_name(&self) -> Option<String> {
+        self.workspace_name.clone()
+    }
+
+    /// Get the working_directory
+    pub fn working_directory(&self) -> PathBuf {
+        self.working_directory.clone()
     }
 
     fn go_to_line(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -340,10 +369,17 @@ impl CodeEditorPanel {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         Button::new("line-number")
-            .when(self.line_number, |this| this.icon(IconName::Check))
-            .label("Line Number")
             .ghost()
             .xsmall()
+            .child(
+                Icon::new(crate::assets::Icon::Hash)
+                    .size(px(16.))
+                    .text_color(if self.line_number {
+                        cx.theme().accent_foreground
+                    } else {
+                        cx.theme().muted_foreground
+                    })
+            )
             .on_click(cx.listener(|this, _, window, cx| {
                 this.line_number = !this.line_number;
                 this.editor.update(cx, |state, cx| {
@@ -357,8 +393,15 @@ impl CodeEditorPanel {
         Button::new("soft-wrap")
             .ghost()
             .xsmall()
-            .when(self.soft_wrap, |this| this.icon(IconName::Check))
-            .label("Soft Wrap")
+            .child(
+                Icon::new(crate::assets::Icon::TextWrap)
+                    .size(px(16.))
+                    .text_color(if self.soft_wrap {
+                        cx.theme().accent_foreground
+                    } else {
+                        cx.theme().muted_foreground
+                    })
+            )
             .on_click(cx.listener(|this, _, window, cx| {
                 this.soft_wrap = !this.soft_wrap;
                 this.editor.update(cx, |state, cx| {
@@ -376,8 +419,15 @@ impl CodeEditorPanel {
         Button::new("indent-guides")
             .ghost()
             .xsmall()
-            .when(self.indent_guides, |this| this.icon(IconName::Check))
-            .label("Indent Guides")
+            .child(
+                Icon::new(crate::assets::Icon::ListTree)
+                    .size(px(16.))
+                    .text_color(if self.indent_guides {
+                        cx.theme().accent_foreground
+                    } else {
+                        cx.theme().muted_foreground
+                    })
+            )
             .on_click(cx.listener(|this, _, window, cx| {
                 this.indent_guides = !this.indent_guides;
                 this.editor.update(cx, |state, cx| {
@@ -398,12 +448,18 @@ impl CodeEditorPanel {
         Button::new("line-column")
             .ghost()
             .xsmall()
-            .label(format!(
-                "{}:{} ({} byte)",
-                position.line + 1,
-                position.character + 1,
-                cursor
-            ))
+            .child(
+                h_flex()
+                    .gap_1p5()
+                    .items_center()
+                    .child(Icon::new(crate::assets::Icon::ArrowRightToLine).size(px(14.)))
+                    .child(format!(
+                        "{}:{} ({} byte)",
+                        position.line + 1,
+                        position.character + 1,
+                        cursor
+                    ))
+            )
             .on_click(cx.listener(Self::go_to_line))
     }
 

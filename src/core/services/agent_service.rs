@@ -109,10 +109,25 @@ impl AgentService {
         agent_name: &str,
         mcp_servers: Vec<acp::McpServer>,
     ) -> Result<String> {
+        self.create_session_with_mcp_and_cwd(
+            agent_name,
+            mcp_servers,
+            std::env::current_dir().unwrap_or_default(),
+        )
+        .await
+    }
+
+    /// Create a new session with MCP servers and custom working directory
+    pub async fn create_session_with_mcp_and_cwd(
+        &self,
+        agent_name: &str,
+        mcp_servers: Vec<acp::McpServer>,
+        cwd: std::path::PathBuf,
+    ) -> Result<String> {
         let agent_handle = self.get_agent_handle(agent_name).await?;
 
-        let mut request = acp::NewSessionRequest::new(std::env::current_dir().unwrap_or_default());
-        request.cwd = std::env::current_dir().unwrap_or_default();
+        let mut request = acp::NewSessionRequest::new(cwd.clone());
+        request.cwd = cwd;
         request.mcp_servers = mcp_servers;
         request.meta = None;
 
@@ -174,13 +189,30 @@ impl AgentService {
         session_id: &str,
         mcp_servers: Vec<acp::McpServer>,
     ) -> Result<String> {
+        self.resume_session_with_mcp_and_cwd(
+            agent_name,
+            session_id,
+            mcp_servers,
+            std::env::current_dir().unwrap_or_default(),
+        )
+        .await
+    }
+
+    /// Resume an existing session with MCP servers and custom working directory
+    pub async fn resume_session_with_mcp_and_cwd(
+        &self,
+        agent_name: &str,
+        session_id: &str,
+        mcp_servers: Vec<acp::McpServer>,
+        cwd: std::path::PathBuf,
+    ) -> Result<String> {
         let agent_handle = self.get_agent_handle(agent_name).await?;
 
         let mut request = acp::ResumeSessionRequest::new(
             acp::SessionId::from(session_id.to_string()),
-            std::env::current_dir().unwrap_or_default(),
+            cwd.clone(),
         );
-        request.cwd = std::env::current_dir().unwrap_or_default();
+        request.cwd = cwd;
         request.mcp_servers = mcp_servers;
         request.meta = None;
 

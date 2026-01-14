@@ -1094,7 +1094,8 @@ impl TaskPanel {
                                                 t!("task_panel.workspace.open_terminal").to_string(),
                                             )
                                             .icon(IconName::SquareTerminal)
-                                            .on_click(
+                                            .on_click({
+                                                let workspace_path = workspace_path.clone();
                                                 move |_, window, cx| {
                                                     window.dispatch_action(
                                                         Box::new(PanelAction::add_terminal(
@@ -1103,8 +1104,26 @@ impl TaskPanel {
                                                         )),
                                                         cx,
                                                     );
-                                                },
-                                            ),
+                                                }
+                                            }),
+                                        )
+                                        .item(
+                                            PopupMenuItem::new(
+                                                t!("task_panel.workspace.open_code_editor").to_string(),
+                                            )
+                                            .icon(IconName::File)
+                                            .on_click({
+                                                let workspace_path = workspace_path.clone();
+                                                move |_, window, cx| {
+                                                    window.dispatch_action(
+                                                        Box::new(PanelAction::add_code_editor(
+                                                            gpui_component::dock::DockPlacement::Right,
+                                                            Some(workspace_path.clone()),
+                                                        )),
+                                                        cx,
+                                                    );
+                                                }
+                                            }),
                                         )
                                         .separator()
                                         .item(
@@ -1158,7 +1177,10 @@ impl TaskPanel {
             .hover(|s| s.bg(theme.accent.opacity(0.3)))
             .on_click(cx.listener(move |_this, _, window, cx| {
                 window.dispatch_action(
-                    Box::new(PanelAction::show_welcome(Some(workspace_id.clone()))),
+                    Box::new(PanelAction::add_welcome(
+                        Some(workspace_id.clone()),
+                        gpui_component::dock::DockPlacement::Center,
+                    )),
                     cx,
                 );
             }))

@@ -48,6 +48,8 @@ pub struct WelcomePanel {
     active_workspace_name: Option<String>,
     /// Specific workspace ID to display (if provided via action)
     workspace_id: Option<String>,
+    /// Working directory for file operations
+    working_directory: std::path::PathBuf,
     pasted_images: Vec<(ImageContent, String)>,
     code_selections: Vec<AddCodeSelection>,
     selected_files: Vec<String>,
@@ -122,12 +124,46 @@ impl WelcomePanel {
         Self::view_internal(Some(workspace_id), window, cx)
     }
 
+    /// Get the workspace_id (if this panel is associated with a workspace)
+    pub fn workspace_id(&self) -> Option<String> {
+        self.workspace_id.clone()
+    }
+
+    /// Get the workspace_name (if available)
+    pub fn workspace_name(&self) -> Option<String> {
+        self.active_workspace_name.clone()
+    }
+
+    /// Get the working_directory
+    pub fn working_directory(&self) -> std::path::PathBuf {
+        self.working_directory.clone()
+    }
+
+    /// Create a WelcomePanel with specific workspace and working directory (for restoration from persistence)
+    pub fn view_with_workspace_and_dir(
+        workspace_id: Option<String>,
+        working_directory: std::path::PathBuf,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<Self> {
+        Self::view_internal_with_dir(workspace_id, Some(working_directory), window, cx)
+    }
+
     fn view_internal(
         workspace_id: Option<String>,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
-        let entity = cx.new(|cx| Self::new(workspace_id.clone(), window, cx));
+        Self::view_internal_with_dir(workspace_id, None, window, cx)
+    }
+
+    fn view_internal_with_dir(
+        workspace_id: Option<String>,
+        working_directory: Option<std::path::PathBuf>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<Self> {
+        let entity = cx.new(|cx| Self::new(workspace_id.clone(), working_directory, window, cx));
 
         // Subscribe to CodeSelectionBus using the shared helper function
         crate::core::event_bus::subscribe_entity_to_code_selections(
@@ -278,7 +314,17 @@ impl WelcomePanel {
                 if let Some(entity) = weak_entity.upgrade() {
                     entity.update(cx, |this, cx| {
                         this.has_workspace = workspace.is_some();
-                        this.active_workspace_name = workspace.map(|ws| ws.name);
+                        if let Some(ref ws) = workspace {
+                            this.active_workspace_name = Some(ws.name.clone());
+                            // Update working_directory to use workspace path
+                            this.working_directory = ws.path.clone();
+                            log::info!(
+                                "[WelcomePanel] Updated working directory to: {:?}",
+                                this.working_directory
+                            );
+                        } else {
+                            this.active_workspace_name = None;
+                        }
                         log::info!(
                             "[WelcomePanel] Updated workspace name: {:?}",
                             this.active_workspace_name
@@ -291,7 +337,7 @@ impl WelcomePanel {
         .detach();
     }
 
-    fn new(workspace_id: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(workspace_id: Option<String>, working_directory: Option<std::path::PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("markdown")
@@ -301,8 +347,9 @@ impl WelcomePanel {
                 .placeholder(t!("welcome.input.placeholder").to_string())
         });
 
-        // Get the current working directory for file picker
-        let working_dir = AppState::global(cx).current_working_dir().clone();
+        // Get the working directory - use provided or get from AppState
+        // If workspace_id is provided, we'll update it asynchronously in load_workspace_info
+        let working_dir = working_directory.unwrap_or_else(|| AppState::global(cx).current_working_dir().clone());
 
         let context_list = cx.new(|cx| {
             let delegate = FilePickerDelegate::new(&working_dir);
@@ -343,6 +390,7 @@ impl WelcomePanel {
             has_workspace: false,
             active_workspace_name: None,
             workspace_id,
+            working_directory: working_dir,
             pasted_images: Vec::new(),
             code_selections: Vec::new(),
             selected_files: Vec::new(),
@@ -1141,6 +1189,7 @@ impl WelcomePanel {
         let available_mcps = self.available_mcps.clone();
         let selected_mcps = self.selected_mcps.clone();
         let mcp_selection_initialized = self.mcp_selection_initialized;
+        let cwd = self.working_directory.clone();  // 使用面板的工作目录
 
         let weak_self = cx.entity().downgrade();
         let agent_name_for_session = agent_name.clone();
@@ -1159,8 +1208,14 @@ impl WelcomePanel {
                 }
             }
 
+            log::info!(
+                "[WelcomePanel] Creating session for agent '{}' with cwd: {:?}",
+                agent_name_for_session,
+                cwd
+            );
+
             match agent_service
-                .create_session_with_mcp(&agent_name_for_session, mcp_servers)
+                .create_session_with_mcp_and_cwd(&agent_name_for_session, mcp_servers, cwd)
                 .await
             {
                 Ok(session_id) => {
@@ -1254,14 +1309,21 @@ impl WelcomePanel {
                 state.set_value("", window, cx);
             });
 
-            // Dispatch CreateTaskFromWelcome action with images
+            // Dispatch CreateTaskFromWelcome action with images and workspace_id
             let images = std::mem::take(&mut self.pasted_images);
+            let workspace_id = self.workspace_id.clone();
             let action = CreateTaskFromWelcome {
                 task_input: task_name,
                 agent_name,
                 mode,
                 images,
+                workspace_id,
             };
+
+            log::info!(
+                "[WelcomePanel] Dispatching CreateTaskFromWelcome with workspace_id: {:?}",
+                action.workspace_id
+            );
 
             window.dispatch_action(Box::new(action), cx);
 

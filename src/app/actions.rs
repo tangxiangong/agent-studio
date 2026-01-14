@@ -23,6 +23,11 @@ pub enum PanelKind {
         #[serde(skip)]
         working_directory: Option<PathBuf>,
     },
+    /// 代码编辑器面板，可选工作目录
+    CodeEditor {
+        #[serde(skip)]
+        working_directory: Option<PathBuf>,
+    },
     /// 欢迎面板，可选 workspace_id
     Welcome { workspace_id: Option<String> },
     /// 工具调用详情面板
@@ -68,6 +73,20 @@ impl PanelAction {
     pub fn add_terminal(placement: DockPlacement, working_directory: Option<PathBuf>) -> Self {
         Self(PanelCommand::Add {
             panel: PanelKind::Terminal { working_directory },
+            placement,
+        })
+    }
+
+    pub fn add_code_editor(placement: DockPlacement, working_directory: Option<PathBuf>) -> Self {
+        Self(PanelCommand::Add {
+            panel: PanelKind::CodeEditor { working_directory },
+            placement,
+        })
+    }
+
+    pub fn add_welcome(workspace_id: Option<String>, placement: DockPlacement) -> Self {
+        Self(PanelCommand::Add {
+            panel: PanelKind::Welcome { workspace_id },
             placement,
         })
     }
@@ -184,6 +203,8 @@ pub struct CreateTaskFromWelcome {
     pub mode: String,
     /// 附加的图片列表 (ImageContent, filename)
     pub images: Vec<(ImageContent, String)>,
+    /// 目标工作区 ID（可选，如果未指定则使用 active workspace）
+    pub workspace_id: Option<String>,
 }
 
 /// 发送消息到指定会话

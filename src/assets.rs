@@ -54,6 +54,14 @@ pub enum Icon {
     Monitor,
     Trash2,
     SquarePause,
+    Code,
+    FolderTree,
+    Hash,
+    ListOrdered,
+    ListTree,
+    MoveRight,
+    TextWrap,
+    ArrowRightToLine,
 }
 
 impl IconNamed for Icon {
@@ -77,6 +85,14 @@ impl IconNamed for Icon {
             Icon::Monitor => "icons2/monitor.svg",
             Icon::Trash2 => "icons2/trash-2.svg",
             Icon::SquarePause => "icons2/square-pause.svg",
+            Icon::Code => "icons2/code.svg",
+            Icon::FolderTree => "icons2/folder-tree.svg",
+            Icon::Hash => "icons2/hash.svg",
+            Icon::ListOrdered => "icons2/list-ordered.svg",
+            Icon::ListTree => "icons2/list-tree.svg",
+            Icon::MoveRight => "icons2/move-right.svg",
+            Icon::TextWrap => "icons2/text-wrap.svg",
+            Icon::ArrowRightToLine => "icons2/arrow-right-to-line.svg",
         }
         .into()
     }

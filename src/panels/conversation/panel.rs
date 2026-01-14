@@ -57,7 +57,14 @@ pub struct ConversationPanel {
     code_selections: Vec<AddCodeSelection>,
     /// Session status information for display
     session_status: Option<SessionStatusInfo>,
+    /// Workspace information
+    workspace_id: Option<String>,
+    workspace_name: Option<String>,
+    working_directory: Option<String>,
 }
+
+const MESSAGE_SERVICE_RETRY_DELAY_MS: u64 = 500;
+const MESSAGE_SERVICE_MAX_RETRIES: usize = 60;
 
 impl ConversationPanel {
     /// Create a new panel with mock data (for demo purposes)
@@ -91,6 +98,21 @@ impl ConversationPanel {
         self.session_id.clone()
     }
 
+    /// Get the workspace_id (if available)
+    pub fn workspace_id(&self) -> Option<String> {
+        self.workspace_id.clone()
+    }
+
+    /// Get the workspace_name (if available)
+    pub fn workspace_name(&self) -> Option<String> {
+        self.workspace_name.clone()
+    }
+
+    /// Get the working_directory (if available)
+    pub fn working_directory(&self) -> Option<String> {
+        self.working_directory.clone()
+    }
+
     fn new(window: &mut Window, cx: &mut App) -> Self {
         log::info!("🔧 Initializing ConversationPanel (new)");
         Self::new_internal(None, window, cx)
@@ -121,6 +143,9 @@ impl ConversationPanel {
             pasted_images: Vec::new(),
             code_selections: Vec::new(),
             session_status: None,
+            workspace_id: None,
+            workspace_name: None,
+            working_directory: None,
         }
     }
 
@@ -135,7 +160,12 @@ impl ConversationPanel {
 
     /// Load historical messages for a session
     pub fn load_history_for_session(entity: &Entity<Self>, session_id: String, cx: &mut App) {
-        Self::load_history_for_session_with_retry(entity.clone(), session_id, 20, cx);
+        Self::load_history_for_session_with_retry(
+            entity.clone(),
+            session_id,
+            MESSAGE_SERVICE_MAX_RETRIES,
+            cx,
+        );
     }
 
     fn load_history_for_session_with_retry(
@@ -154,7 +184,7 @@ impl ConversationPanel {
 
                 let weak_entity = entity.downgrade();
                 cx.spawn(async move |cx| {
-                    Timer::after(Duration::from_millis(500)).await;
+                    Timer::after(Duration::from_millis(MESSAGE_SERVICE_RETRY_DELAY_MS)).await;
                     let _ = cx.update(|cx| {
                         if let Some(entity) = weak_entity.upgrade() {
                             Self::load_history_for_session_with_retry(
@@ -235,13 +265,46 @@ impl ConversationPanel {
         session_filter: Option<String>,
         cx: &mut App,
     ) {
+        Self::subscribe_to_updates_with_retry(
+            entity.clone(),
+            session_filter,
+            MESSAGE_SERVICE_MAX_RETRIES,
+            cx,
+        );
+    }
+
+    fn subscribe_to_updates_with_retry(
+        entity: Entity<Self>,
+        session_filter: Option<String>,
+        remaining_attempts: usize,
+        cx: &mut App,
+    ) {
         let weak_entity = entity.downgrade();
 
         // Get MessageService for subscription
         let message_service = match AppState::global(cx).message_service() {
             Some(service) => service.clone(),
             None => {
-                log::error!("MessageService not initialized, cannot subscribe to updates");
+                if remaining_attempts == 0 {
+                    log::error!("MessageService not initialized, cannot subscribe to updates");
+                    return;
+                }
+
+                let weak_entity = weak_entity.clone();
+                cx.spawn(async move |cx| {
+                    Timer::after(Duration::from_millis(MESSAGE_SERVICE_RETRY_DELAY_MS)).await;
+                    let _ = cx.update(|cx| {
+                        if let Some(entity) = weak_entity.upgrade() {
+                            Self::subscribe_to_updates_with_retry(
+                                entity,
+                                session_filter,
+                                remaining_attempts - 1,
+                                cx,
+                            );
+                        }
+                    });
+                })
+                .detach();
                 return;
             }
         };

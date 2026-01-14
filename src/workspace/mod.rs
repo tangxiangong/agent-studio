@@ -67,7 +67,9 @@ impl DockWorkspace {
                 let state = dock_area.read(cx).dump(cx);
                 cx.background_executor().spawn(async move {
                     // Save layout before quitting
-                    Self::save_state(&state).unwrap();
+                    if let Err(e) = Self::save_state(&state) {
+                        log::warn!("Failed to save layout state: {}", e);
+                    }
                 })
             }
         })
@@ -170,7 +172,9 @@ impl DockWorkspace {
                     return;
                 }
 
-                Self::save_state(&state).unwrap();
+                if let Err(e) = Self::save_state(&state) {
+                    log::warn!("Failed to save layout state: {}", e);
+                }
                 this.last_layout_state = Some(state);
             });
         }));
@@ -180,6 +184,9 @@ impl DockWorkspace {
         println!("Save layout...");
         let json = serde_json::to_string_pretty(state)?;
         let state_file = crate::core::config_manager::get_docks_layout_path();
+        if let Some(parent) = state_file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::write(state_file, json)?;
         Ok(())
     }
@@ -290,7 +297,9 @@ impl DockWorkspace {
             view.set_bottom_dock(bottom_panels, Some(px(200.)), true, window, cx);
             view.set_right_dock(right_panels, Some(px(480.)), true, window, cx);
 
-            Self::save_state(&view.dump(cx)).unwrap();
+            if let Err(e) = Self::save_state(&view.dump(cx)) {
+                log::warn!("Failed to save layout state: {}", e);
+            }
         });
     }
 

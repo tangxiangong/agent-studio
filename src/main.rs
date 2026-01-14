@@ -13,6 +13,17 @@ fn main() {
     app.run(move |cx| {
         agentx::init(cx);
 
+        // Initialize system tray
+        match agentx::system_tray::SystemTray::new() {
+            Ok(tray) => {
+                agentx::system_tray::setup_tray_event_handler(tray, cx);
+                log::info!("System tray initialized successfully");
+            }
+            Err(e) => {
+                log::error!("Failed to initialize system tray: {}", e);
+            }
+        }
+
         // Get session_bus and permission_bus from global AppState
         let session_bus = agentx::AppState::global(cx).session_bus.clone();
         let permission_bus = agentx::AppState::global(cx).permission_bus.clone();
@@ -34,12 +45,24 @@ fn main() {
                     Ok(config) => config,
                     Err(e) => {
                         eprintln!("Failed to parse config: {}", e);
-                        return;
+                        match load_default_config() {
+                            Ok(config) => config,
+                            Err(e) => {
+                                eprintln!("Failed to load default config: {}", e);
+                                return;
+                            }
+                        }
                     }
                 },
                 Err(e) => {
                     eprintln!("Failed to read config file: {}", e);
-                    return;
+                    match load_default_config() {
+                        Ok(config) => config,
+                        Err(e) => {
+                            eprintln!("Failed to load default config: {}", e);
+                            return;
+                        }
+                    }
                 }
             };
 
@@ -133,8 +156,23 @@ fn parse_config_path() -> std::path::PathBuf {
         }
         Err(e) => {
             eprintln!("Failed to initialize user config: {}", e);
-            eprintln!("Falling back to local config.json");
-            std::path::PathBuf::from("config.json")
+            let fallback = config_manager::get_user_config_path_or_temp();
+            if let Err(err) = config_manager::ensure_default_config_at(&fallback) {
+                eprintln!(
+                    "Failed to create fallback config at {}: {}",
+                    fallback.display(),
+                    err
+                );
+            }
+            eprintln!("Falling back to {}", fallback.display());
+            fallback
         }
     }
+}
+
+fn load_default_config() -> anyhow::Result<Config> {
+    let raw = agentx::get_default_config()
+        .ok_or_else(|| anyhow::anyhow!("embedded default config missing"))?;
+    let config = serde_json::from_str(&raw).context("invalid embedded default config")?;
+    Ok(config)
 }

@@ -9,8 +9,9 @@ use gpui_component::{
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    AddPanel, AppState, AppTitleBar, CodeEditorPanel, ConversationPanel, SessionManagerPanel,
-    TaskPanel, TerminalPanel, ToggleDockToggleButton, TogglePanelVisible, panels::dock_panel::DockPanelContainer,
+    AppState, AppTitleBar, CodeEditorPanel, ConversationPanel, PanelAction, SessionManagerPanel,
+    TaskPanel, TerminalPanel, ToggleDockToggleButton, TogglePanelVisible,
+    panels::dock_panel::DockPanelContainer,
 };
 
 // Action handlers module
@@ -66,7 +67,9 @@ impl DockWorkspace {
                 let state = dock_area.read(cx).dump(cx);
                 cx.background_executor().spawn(async move {
                     // Save layout before quitting
-                    Self::save_state(&state).unwrap();
+                    if let Err(e) = Self::save_state(&state) {
+                        log::warn!("Failed to save layout state: {}", e);
+                    }
                 })
             }
         })
@@ -85,17 +88,20 @@ impl DockWorkspace {
                             move |menu, _, cx| {
                                 menu.menu(
                                     "Add Panel to Center",
-                                    Box::new(AddPanel(DockPlacement::Center)),
+                                    Box::new(PanelAction::add_conversation(DockPlacement::Center)),
                                 )
                                 .separator()
-                                .menu("Add Panel to Left", Box::new(AddPanel(DockPlacement::Left)))
+                                .menu(
+                                    "Add Panel to Left",
+                                    Box::new(PanelAction::add_conversation(DockPlacement::Left)),
+                                )
                                 .menu(
                                     "Add Panel to Right",
-                                    Box::new(AddPanel(DockPlacement::Right)),
+                                    Box::new(PanelAction::add_conversation(DockPlacement::Right)),
                                 )
                                 .menu(
                                     "Add Panel to Bottom",
-                                    Box::new(AddPanel(DockPlacement::Bottom)),
+                                    Box::new(PanelAction::add_conversation(DockPlacement::Bottom)),
                                 )
                                 .separator()
                                 .menu(
@@ -166,7 +172,9 @@ impl DockWorkspace {
                     return;
                 }
 
-                Self::save_state(&state).unwrap();
+                if let Err(e) = Self::save_state(&state) {
+                    log::warn!("Failed to save layout state: {}", e);
+                }
                 this.last_layout_state = Some(state);
             });
         }));
@@ -176,6 +184,9 @@ impl DockWorkspace {
         println!("Save layout...");
         let json = serde_json::to_string_pretty(state)?;
         let state_file = crate::core::config_manager::get_docks_layout_path();
+        if let Some(parent) = state_file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::write(state_file, json)?;
         Ok(())
     }
@@ -286,7 +297,9 @@ impl DockWorkspace {
             view.set_bottom_dock(bottom_panels, Some(px(200.)), true, window, cx);
             view.set_right_dock(right_panels, Some(px(480.)), true, window, cx);
 
-            Self::save_state(&view.dump(cx)).unwrap();
+            if let Err(e) = Self::save_state(&view.dump(cx)) {
+                log::warn!("Failed to save layout state: {}", e);
+            }
         });
     }
 
@@ -375,15 +388,10 @@ impl Render for DockWorkspace {
 
         div()
             .id("story-workspace")
-            .on_action(cx.listener(Self::on_action_add_panel))
-            .on_action(cx.listener(Self::on_action_add_session_panel))
-            .on_action(cx.listener(Self::on_action_add_terminal_panel))
+            .on_action(cx.listener(Self::on_action_panel_action))
             .on_action(cx.listener(Self::on_action_toggle_panel_visible))
             .on_action(cx.listener(Self::on_action_toggle_dock_toggle_button))
-            .on_action(cx.listener(Self::on_action_show_welcome_panel))
             .on_action(cx.listener(Self::on_action_open_setting_panel))
-            .on_action(cx.listener(Self::on_action_show_conversation_panel))
-            .on_action(cx.listener(Self::on_action_show_tool_call_detail_panel))
             .on_action(cx.listener(Self::on_action_new_session_conversation_panel))
             .on_action(cx.listener(Self::on_action_create_task_from_welcome))
             .on_action(cx.listener(Self::on_action_send_message_to_session))

@@ -52,7 +52,7 @@ impl DockPanel for TerminalPanel {
     }
 
     fn paddings() -> Pixels {
-        px(0.)  // No padding for terminal to maximize space
+        px(0.) // No padding for terminal to maximize space
     }
 }
 
@@ -76,8 +76,8 @@ impl TerminalPanel {
         working_directory: Option<std::path::PathBuf>,
     ) -> Self {
         // Load terminal configuration
-        let terminal_config = TerminalConfig::load_or_create()
-            .unwrap_or_else(|_| TerminalConfig::default());
+        let terminal_config =
+            TerminalConfig::load_or_create().unwrap_or_else(|_| TerminalConfig::default());
         let text_style = TextStyle::from_config(&terminal_config);
 
         let mut panel = Self {
@@ -103,17 +103,13 @@ impl TerminalPanel {
         env_vars.insert("COLORTERM".to_string(), "truecolor".to_string());
 
         // 使用指定的工作目录,如果没有则使用当前目录
-        let working_dir = self.working_directory.clone().or_else(|| env::current_dir().ok());
+        let working_dir = self
+            .working_directory
+            .clone()
+            .or_else(|| env::current_dir().ok());
 
         let window_id = window.window_handle().window_id().as_u64();
-        let terminal_task = TerminalBuilder::new(
-            working_dir,
-            shell,
-            env_vars,
-            None,
-            window_id,
-            cx,
-        );
+        let terminal_task = TerminalBuilder::new(working_dir, shell, env_vars, None, window_id, cx);
 
         let text_style = self.text_style.clone();
         let weak_self = cx.entity().downgrade();
@@ -148,8 +144,12 @@ impl TerminalPanel {
                         });
 
                         let terminal_view = cx.new(|cx| {
-                            let mut view =
-                                TerminalView::new_with_style(terminal.clone(), text_style, window, cx);
+                            let mut view = TerminalView::new_with_style(
+                                terminal.clone(),
+                                text_style,
+                                window,
+                                cx,
+                            );
                             view.apply_component_theme(cx);
                             view.observe_component_theme(cx);
                             view
@@ -255,7 +255,12 @@ impl TerminalPanel {
     }
 
     /// Clear the terminal
-    fn clear_terminal(&mut self, _: &gpui::ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn clear_terminal(
+        &mut self,
+        _: &gpui::ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         window.dispatch_action(Box::new(Clear), cx);
     }
 
@@ -333,96 +338,82 @@ impl Render for TerminalPanel {
                                 )
                             }),
                     )
-                    .child(
-                        h_flex()
-                            .gap_1()
-                            .when(is_ready, |el| {
-                                el.child(
-                                    Button::new("copy")
-                                        .icon(Icon::new(IconName::Copy))
-                                        .ghost()
-                                        .small()
-                                        .on_click(cx.listener(Self::copy)),
-                                )
-                                .child(
-                                    Button::new("paste")
-                                        .icon(Icon::new(IconName::File))
-                                        .ghost()
-                                        .small()
-                                        .on_click(cx.listener(Self::paste)),
-                                )
-                                .child(
-                                    Button::new("clear")
-                                        .icon(Icon::new(crate::assets::Icon::Trash2))
-                                        .ghost()
-                                        .small()
-                                        .on_click(cx.listener(Self::clear_terminal)),
-                                )
-                            }),
-                    ),
+                    .child(h_flex().gap_1().when(is_ready, |el| {
+                        el.child(
+                            Button::new("copy")
+                                .icon(Icon::new(IconName::Copy))
+                                .ghost()
+                                .small()
+                                .on_click(cx.listener(Self::copy)),
+                        )
+                        .child(
+                            Button::new("paste")
+                                .icon(Icon::new(IconName::File))
+                                .ghost()
+                                .small()
+                                .on_click(cx.listener(Self::paste)),
+                        )
+                        .child(
+                            Button::new("clear")
+                                .icon(Icon::new(crate::assets::Icon::Trash2))
+                                .ghost()
+                                .small()
+                                .on_click(cx.listener(Self::clear_terminal)),
+                        )
+                    })),
             )
             .child(
                 // Terminal content area
-                gpui::div()
-                    .flex_1()
-                    .w_full()
-                    .overflow_hidden()
-                    .map(|el| {
-                        if let Some(terminal_view) = &self.terminal_view {
-                            el.child(terminal_view.clone())
-                        } else if is_initializing {
-                            el.flex()
+                gpui::div().flex_1().w_full().overflow_hidden().map(|el| {
+                    if let Some(terminal_view) = &self.terminal_view {
+                        el.child(terminal_view.clone())
+                    } else if is_initializing {
+                        el.flex().items_center().justify_center().child(
+                            v_flex()
+                                .gap_2()
                                 .items_center()
-                                .justify_center()
                                 .child(
-                                    v_flex()
-                                        .gap_2()
-                                        .items_center()
-                                        .child(
-                                            Icon::new(IconName::LoaderCircle)
-                                                .text_color(theme.muted_foreground)
-                                                .size_6(),
-                                        )
-                                        .child(
-                                            gpui::div()
-                                                .text_sm()
-                                                .text_color(theme.muted_foreground)
-                                                .child("Initializing terminal..."),
-                                        ),
+                                    Icon::new(IconName::LoaderCircle)
+                                        .text_color(theme.muted_foreground)
+                                        .size_6(),
                                 )
-                        } else if let TerminalStatus::Failed(ref error) = self.status {
-                            el.flex()
+                                .child(
+                                    gpui::div()
+                                        .text_sm()
+                                        .text_color(theme.muted_foreground)
+                                        .child("Initializing terminal..."),
+                                ),
+                        )
+                    } else if let TerminalStatus::Failed(ref error) = self.status {
+                        el.flex().items_center().justify_center().child(
+                            v_flex()
+                                .gap_3()
                                 .items_center()
-                                .justify_center()
+                                .max_w(px(400.))
+                                .p_4()
                                 .child(
-                                    v_flex()
-                                        .gap_3()
-                                        .items_center()
-                                        .max_w(px(400.))
-                                        .p_4()
-                                        .child(
-                                            Icon::new(IconName::TriangleAlert)
-                                                .text_color(theme.muted_foreground)
-                                                .size_12(),
-                                        )
-                                        .child(
-                                            gpui::div()
-                                                .text_sm()
-                                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                .text_color(theme.foreground)
-                                                .child("Failed to Initialize Terminal"),
-                                        )
-                                        .child(
-                                            gpui::div()
-                                                .text_xs()
-                                                .text_color(theme.muted_foreground)
-                                                .child(error.clone()),
-                                        ),
+                                    Icon::new(IconName::TriangleAlert)
+                                        .text_color(theme.muted_foreground)
+                                        .size_12(),
                                 )
-                        } else {
-                            el
-                        }
-                    }),
+                                .child(
+                                    gpui::div()
+                                        .text_sm()
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(theme.foreground)
+                                        .child("Failed to Initialize Terminal"),
+                                )
+                                .child(
+                                    gpui::div()
+                                        .text_xs()
+                                        .text_color(theme.muted_foreground)
+                                        .child(error.clone()),
+                                ),
+                        )
+                    } else {
+                        el
+                    }
+                }),
             )
     }
 }

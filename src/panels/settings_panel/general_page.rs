@@ -244,7 +244,9 @@ impl SettingsPanel {
                             .default_value(default_settings.nodejs_path),
                         )
                         .layout(Axis::Vertical)
-                        .description(t!("settings.general.other.nodejs_path.description").to_string()),
+                        .description(
+                            t!("settings.general.other.nodejs_path.description").to_string(),
+                        ),
                     ]),
             ])
     }

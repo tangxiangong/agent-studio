@@ -1,5 +1,7 @@
 use gpui::{App, Entity, SharedString};
-use gpui_component::setting::{NumberFieldOptions, SettingField, SettingGroup, SettingItem, SettingPage};
+use gpui_component::setting::{
+    NumberFieldOptions, SettingField, SettingGroup, SettingItem, SettingPage,
+};
 use rust_i18n::t;
 
 use super::panel::SettingsPanel;
@@ -30,15 +32,17 @@ impl SettingsPanel {
                                 vec![
                                     (
                                         SharedString::from("http"),
-                                        SharedString::from(t!("settings.network.proxy.type.http"))
+                                        SharedString::from(t!("settings.network.proxy.type.http")),
                                     ),
                                     (
                                         SharedString::from("https"),
-                                        SharedString::from(t!("settings.network.proxy.type.https"))
+                                        SharedString::from(t!("settings.network.proxy.type.https")),
                                     ),
                                     (
                                         SharedString::from("socks5"),
-                                        SharedString::from(t!("settings.network.proxy.type.socks5"))
+                                        SharedString::from(t!(
+                                            "settings.network.proxy.type.socks5"
+                                        )),
                                     ),
                                 ],
                                 |_cx: &App| SharedString::from("http"),

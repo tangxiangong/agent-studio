@@ -487,10 +487,13 @@ async fn agent_event_loop(
         || config.command.contains("npx");
 
     if requires_nodejs {
-        log::info!("Agent '{}' requires Node.js, validating environment...", agent_name);
+        log::info!(
+            "Agent '{}' requires Node.js, validating environment...",
+            agent_name
+        );
 
-        use std::path::PathBuf;
         use crate::core::nodejs::NodeJsChecker;
+        use std::path::PathBuf;
 
         let custom_path = config.nodejs_path.as_ref().map(PathBuf::from);
         let nodejs_checker = NodeJsChecker::new(custom_path);
@@ -515,10 +518,7 @@ async fn agent_event_loop(
                 return Err(anyhow!(error_msg));
             }
             Err(e) => {
-                let error_msg = format!(
-                    "Failed to validate Node.js for '{}': {}",
-                    agent_name, e
-                );
+                let error_msg = format!("Failed to validate Node.js for '{}': {}", agent_name, e);
                 log::error!("{}", error_msg);
                 let _ = ready_tx.send(Err(anyhow!(error_msg.clone())));
                 return Err(anyhow!(error_msg));
@@ -543,11 +543,7 @@ async fn agent_event_loop(
 
     // Set proxy environment variables if enabled
     if let Some(proxy_url) = proxy_config.to_env_value() {
-        log::info!(
-            "Setting proxy for agent '{}': {}",
-            agent_name,
-            proxy_url
-        );
+        log::info!("Setting proxy for agent '{}': {}", agent_name, proxy_url);
 
         // Set standard proxy environment variables
         match proxy_config.proxy_type.as_str() {

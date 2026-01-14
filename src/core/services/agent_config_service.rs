@@ -716,6 +716,8 @@ impl AgentConfigService {
 
 #[cfg(test)]
 mod tests {
+    use crate::core::config::ProxyConfig;
+
     use super::*;
     use std::collections::HashMap;
 
@@ -754,6 +756,7 @@ mod tests {
             },
             args: vec![],
             env: HashMap::new(),
+            nodejs_path: None,
         };
 
         // First add should work (would fail without actual AgentManager, but tests structure)
@@ -771,6 +774,7 @@ mod tests {
             commands: HashMap::new(),
             system_prompts: HashMap::new(),
             tool_call_preview_max_lines: 10,
+            proxy: ProxyConfig::default(),
         };
 
         let _event_bus = AgentConfigBusContainer::new();

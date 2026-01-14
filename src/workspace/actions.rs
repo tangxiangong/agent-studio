@@ -6,12 +6,11 @@ use gpui_component::dock::{
 use std::sync::Arc;
 
 use crate::{
-    AddPanel, AddSessionPanel, AppState, ConversationPanel, CreateTaskFromWelcome,
-    NewSessionConversationPanel, SendMessageToSession, SettingsPanel, ShowConversationPanel,
-    ShowToolCallDetail, ShowWelcomePanel, ToggleDockToggleButton, TogglePanelVisible, WelcomePanel,
+    AppState, ConversationPanel, CreateTaskFromWelcome, NewSessionConversationPanel, PanelAction,
+    SendMessageToSession, SettingsPanel, ToggleDockToggleButton, TogglePanelVisible, WelcomePanel,
     app::actions::{
-        AddAgent, CancelSession, ChangeConfigPath, ReloadAgentConfig, RemoveAgent, RestartAgent,
-        SetUploadDir, Submit, UpdateAgent,
+        AddAgent, CancelSession, ChangeConfigPath, PanelCommand, PanelKind, ReloadAgentConfig,
+        RemoveAgent, RestartAgent, SetUploadDir, Submit, UpdateAgent,
     },
     panels::{
         DockPanel,
@@ -22,12 +21,10 @@ use crate::{
 };
 
 use super::DockWorkspace;
-//   - on_action_add_panel - 添加面板到 dock 区域
+//   - on_action_panel_action - 添加/展示面板
 //   - on_action_toggle_panel_visible - 切换面板可见性
 //   - on_action_toggle_dock_toggle_button - 切换 dock 按钮显示
 //   - on_action_open - 打开文件夹选择器
-//   - on_action_show_welcome_panel - 显示欢迎面板
-//   - on_action_show_conversation_panel - 显示对话面板
 //   - on_action_create_task_from_welcome - 从欢迎面板创建任务
 
 impl DockWorkspace {
@@ -54,45 +51,14 @@ impl DockWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(session_id) = session_id.as_deref() {
+        if let Some(session_id) = session_id.as_deref().filter(|id| !id.is_empty()) {
             if self.activate_existing_session_panel(session_id, window, cx) {
                 return;
             }
 
             let session_id = session_id.to_string();
 
-            // Resume the session before creating the panel
-            let agent_service = AppState::global(cx).agent_service().cloned();
-            if let Some(agent_service) = agent_service {
-                let session_id_clone = session_id.clone();
-                cx.spawn(async move |_this, _cx| {
-                    if let Some(agent_name) = agent_service.get_agent_for_session(&session_id_clone)
-                    {
-                        log::info!(
-                            "Resuming session {} for agent {}",
-                            session_id_clone,
-                            agent_name
-                        );
-                        match agent_service
-                            .resume_session(&agent_name, &session_id_clone)
-                            .await
-                        {
-                            Ok(_) => {
-                                log::info!("Successfully resumed session {}", session_id_clone);
-                            }
-                            Err(e) => {
-                                log::warn!("Failed to resume session {}: {}", session_id_clone, e);
-                            }
-                        }
-                    } else {
-                        log::warn!(
-                            "No agent found for session {}, skipping resume",
-                            session_id_clone
-                        );
-                    }
-                })
-                .detach();
-            }
+            Self::resume_session_if_needed(&session_id, cx);
 
             self.dock_area.update(cx, |dock_area, cx| {
                 let conversation_panel =
@@ -134,6 +100,39 @@ impl DockWorkspace {
                 cx,
             );
         });
+    }
+
+    fn resume_session_if_needed(session_id: &str, cx: &mut Context<Self>) {
+        let agent_service = AppState::global(cx).agent_service().cloned();
+        if let Some(agent_service) = agent_service {
+            let session_id_clone = session_id.to_string();
+            cx.spawn(async move |_this, _cx| {
+                if let Some(agent_name) = agent_service.get_agent_for_session(&session_id_clone) {
+                    log::info!(
+                        "Resuming session {} for agent {}",
+                        session_id_clone,
+                        agent_name
+                    );
+                    match agent_service
+                        .resume_session(&agent_name, &session_id_clone)
+                        .await
+                    {
+                        Ok(_) => {
+                            log::info!("Successfully resumed session {}", session_id_clone);
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to resume session {}: {}", session_id_clone, e);
+                        }
+                    }
+                } else {
+                    log::warn!(
+                        "No agent found for session {}, skipping resume",
+                        session_id_clone
+                    );
+                }
+            })
+            .detach();
+        }
     }
 
     fn find_focused_tab_panel(
@@ -330,102 +329,107 @@ impl DockWorkspace {
         );
         false
     }
-    /// Handle AddPanel action - randomly add a conversation panel to specified dock area
-    pub(super) fn on_action_add_panel(
+    /// Handle PanelAction - add/show panels with unified parameters
+    pub(super) fn on_action_panel_action(
         &mut self,
-        action: &AddPanel,
+        action: &PanelAction,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Random pick up a panel to add
-        let panel = Arc::new(DockPanelContainer::panel::<ConversationPanel>(window, cx));
-
-        self.dock_area.update(cx, |dock_area, cx| {
-            dock_area.add_panel(panel, action.0, None, window, cx);
-        });
+        match &action.0 {
+            PanelCommand::Add { panel, placement } => match panel {
+                PanelKind::Conversation { session_id } => {
+                    self.add_conversation_panel_to(session_id.clone(), *placement, window, cx);
+                }
+                PanelKind::Terminal { working_directory } => {
+                    self.add_terminal_panel_to(working_directory.clone(), *placement, window, cx);
+                }
+                PanelKind::Welcome { workspace_id } => {
+                    self.show_welcome_panel(workspace_id.clone(), window, cx);
+                }
+                PanelKind::ToolCallDetail {
+                    tool_call_id: _,
+                    tool_call,
+                } => {
+                    self.show_tool_call_detail_panel((**tool_call).clone(), window, cx);
+                }
+            },
+            PanelCommand::Show(panel) => match panel {
+                PanelKind::Conversation { session_id } => {
+                    self.show_conversation_panel(session_id.clone(), window, cx);
+                }
+                PanelKind::Terminal { working_directory } => {
+                    self.add_terminal_panel_to(
+                        working_directory.clone(),
+                        DockPlacement::Bottom,
+                        window,
+                        cx,
+                    );
+                }
+                PanelKind::Welcome { workspace_id } => {
+                    self.show_welcome_panel(workspace_id.clone(), window, cx);
+                }
+                PanelKind::ToolCallDetail {
+                    tool_call_id: _,
+                    tool_call,
+                } => {
+                    self.show_tool_call_detail_panel((**tool_call).clone(), window, cx);
+                }
+            },
+        }
     }
 
-    /// Handle AddSessionPanel action - add a conversation panel for a specific session
-    pub(super) fn on_action_add_session_panel(
+    fn add_conversation_panel_to(
         &mut self,
-        action: &AddSessionPanel,
+        session_id: Option<String>,
+        placement: DockPlacement,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !action.session_id.is_empty()
-            && self.activate_existing_session_panel(&action.session_id, window, cx)
-        {
+        let session_id = session_id.filter(|id| !id.is_empty());
+        if let Some(session_id) = session_id {
+            if self.activate_existing_session_panel(&session_id, window, cx) {
+                return;
+            }
+
+            Self::resume_session_if_needed(&session_id, cx);
+
+            let panel = Arc::new(Self::panel_for_session(session_id, window, cx));
+            self.dock_area.update(cx, |dock_area, cx| {
+                dock_area.add_panel(panel, placement, None, window, cx);
+            });
             return;
         }
 
-        let panel = if action.session_id.is_empty() {
-            Arc::new(DockPanelContainer::panel::<ConversationPanel>(window, cx))
-        } else {
-            // Resume the session before creating the panel
-            let session_id = action.session_id.clone();
-            let agent_service = AppState::global(cx).agent_service().cloned();
-
-            if let Some(agent_service) = agent_service {
-                let session_id_clone = session_id.clone();
-                cx.spawn(async move |_this, _cx| {
-                    // Get the agent for this session
-                    if let Some(agent_name) = agent_service.get_agent_for_session(&session_id_clone)
-                    {
-                        log::info!(
-                            "Resuming session {} for agent {}",
-                            session_id_clone,
-                            agent_name
-                        );
-                        match agent_service
-                            .resume_session(&agent_name, &session_id_clone)
-                            .await
-                        {
-                            Ok(_) => {
-                                log::info!("Successfully resumed session {}", session_id_clone);
-                            }
-                            Err(e) => {
-                                log::warn!("Failed to resume session {}: {}", session_id_clone, e);
-                            }
-                        }
-                    } else {
-                        log::warn!(
-                            "No agent found for session {}, skipping resume",
-                            session_id_clone
-                        );
-                    }
-                })
-                .detach();
-            }
-
-            Arc::new(Self::panel_for_session(session_id, window, cx))
-        };
-
+        let panel = Arc::new(DockPanelContainer::panel::<ConversationPanel>(window, cx));
         self.dock_area.update(cx, |dock_area, cx| {
-            dock_area.add_panel(panel, action.placement, None, window, cx);
+            dock_area.add_panel(panel, placement, None, window, cx);
         });
     }
 
-    /// Handle AddTerminalPanel action - add a terminal panel to the dock area
-    pub(super) fn on_action_add_terminal_panel(
+    fn add_terminal_panel_to(
         &mut self,
-        action: &crate::AddTerminalPanel,
+        working_directory: Option<std::path::PathBuf>,
+        placement: DockPlacement,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let panel = if let Some(working_directory) = &action.working_directory {
+        let panel = if let Some(working_directory) = working_directory {
             // 使用指定的工作目录创建终端面板
             Arc::new(DockPanelContainer::panel_for_terminal_with_cwd(
-                working_directory.clone(),
+                working_directory,
                 window,
                 cx,
             ))
         } else {
             // 使用默认工作目录创建终端面板
-            Arc::new(DockPanelContainer::panel::<crate::TerminalPanel>(window, cx))
+            Arc::new(DockPanelContainer::panel::<crate::TerminalPanel>(
+                window, cx,
+            ))
         };
 
         self.dock_area.update(cx, |dock_area, cx| {
-            dock_area.add_panel(panel, action.placement, None, window, cx);
+            dock_area.add_panel(panel, placement, None, window, cx);
         });
     }
 
@@ -488,15 +492,14 @@ impl DockWorkspace {
             dock_area.add_panel(panel, DockPlacement::Center, None, window, cx);
         });
     }
-    /// Handle ShowWelcomePanel action - display welcome panel and collapse docks
-    pub(super) fn on_action_show_welcome_panel(
+    fn show_welcome_panel(
         &mut self,
-        action: &ShowWelcomePanel,
+        workspace_id: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         // Create WelcomePanel for the center with optional workspace_id
-        let welcome_panel = if let Some(workspace_id) = &action.workspace_id {
+        let welcome_panel = if let Some(workspace_id) = &workspace_id {
             DockPanelContainer::panel_for_workspace(workspace_id.clone(), window, cx)
         } else {
             DockPanelContainer::panel::<WelcomePanel>(window, cx)
@@ -525,19 +528,16 @@ impl DockWorkspace {
         });
     }
 
-    /// Handle ShowToolCallDetail action - display tool call detail panel in right dock
-    pub(super) fn on_action_show_tool_call_detail_panel(
+    fn show_tool_call_detail_panel(
         &mut self,
-        action: &ShowToolCallDetail,
+        tool_call: crate::ToolCall,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        log::debug!("on_action_show_tool_call_detail_panel called");
+        log::debug!("show_tool_call_detail_panel called");
 
         let panel = Arc::new(DockPanelContainer::panel_for_tool_call_detail(
-            action.tool_call.clone(),
-            window,
-            cx,
+            tool_call, window, cx,
         ));
 
         self.dock_area.update(cx, |dock_area, cx| {
@@ -560,16 +560,6 @@ impl DockWorkspace {
                 dock_area.is_dock_open(DockPlacement::Right, cx)
             );
         });
-    }
-
-    /// Handle ShowConversationPanel action - display conversation panel
-    pub(super) fn on_action_show_conversation_panel(
-        &mut self,
-        action: &ShowConversationPanel,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.show_conversation_panel(action.session_id.clone(), window, cx);
     }
 
     /// Handle NewSessionConversationPanel action - add a new conversation panel

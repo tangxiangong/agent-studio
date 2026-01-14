@@ -35,7 +35,7 @@ unstable = []
 # Core GPUI framework
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui-component = { git = "https://github.com/sxhxliang/gpui-component", branch = "dev" }
-gpui_term = {path = "../gpui-term/crates/gpui_term"}
+gpui_term = { git = "https://github.com/sxhxliang/gpui-term" }
 # gpui-component = { path = "../crates/ui" }
 
 # Agent communication

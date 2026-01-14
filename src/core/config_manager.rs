@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Get the user data directory for AgentX
 /// - macOS: ~/.agentx/
@@ -33,37 +33,71 @@ pub fn get_user_data_dir() -> Result<PathBuf> {
     }
 }
 
+/// Ensure the user data directory exists
+pub fn ensure_user_data_dir() -> Result<PathBuf> {
+    let dir = get_user_data_dir()?;
+    if !dir.exists() {
+        log::info!("Creating user data directory: {:?}", dir);
+        std::fs::create_dir_all(&dir)
+            .with_context(|| format!("Failed to create directory: {:?}", dir))?;
+    }
+    Ok(dir)
+}
+
+fn fallback_data_dir() -> PathBuf {
+    let dir = std::env::temp_dir().join("agentx");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        log::warn!("Failed to create fallback data directory {:?}: {}", dir, e);
+    }
+    dir
+}
+
+pub fn user_data_dir_or_temp() -> PathBuf {
+    match ensure_user_data_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::warn!("Failed to resolve user data directory: {}", e);
+            fallback_data_dir()
+        }
+    }
+}
+
+pub fn ensure_default_config_at(path: &Path) -> Result<()> {
+    if path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
+    }
+    let default_config = crate::assets::get_default_config()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get embedded default config"))?;
+    std::fs::write(path, default_config)
+        .with_context(|| format!("Failed to write config file: {:?}", path))?;
+    Ok(())
+}
+
 /// Get the config file path in the user data directory
 pub fn get_user_config_path() -> Result<PathBuf> {
     Ok(get_user_data_dir()?.join("config.json"))
 }
 
+pub fn get_user_config_path_or_temp() -> PathBuf {
+    user_data_dir_or_temp().join("config.json")
+}
+
 /// Initialize user config directory and config file
 /// If config file doesn't exist, create it from the embedded default config
 pub fn initialize_user_config() -> Result<PathBuf> {
-    let user_data_dir = get_user_data_dir()?;
-    let config_path = get_user_config_path()?;
+    let user_data_dir = ensure_user_data_dir()?;
+    let config_path = user_data_dir.join("config.json");
 
-    // Create user data directory if it doesn't exist
-    if !user_data_dir.exists() {
-        log::info!("Creating user data directory: {:?}", user_data_dir);
-        std::fs::create_dir_all(&user_data_dir)
-            .with_context(|| format!("Failed to create directory: {:?}", user_data_dir))?;
-    }
-
-    // If config file doesn't exist, create it from embedded default
     if !config_path.exists() {
         log::info!(
             "Config file not found, creating from embedded default: {:?}",
             config_path
         );
-
-        let default_config = crate::assets::get_default_config()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get embedded default config"))?;
-
-        std::fs::write(&config_path, default_config)
-            .with_context(|| format!("Failed to write config file: {:?}", config_path))?;
-
+        ensure_default_config_at(&config_path)?;
         log::info!("Created default config file at: {:?}", config_path);
     } else {
         log::info!("Using existing config file: {:?}", config_path);
@@ -88,7 +122,7 @@ pub fn load_user_config() -> Result<crate::core::config::Config> {
 
 /// Get the themes directory path in the user data directory
 pub fn get_themes_dir() -> Result<PathBuf> {
-    Ok(get_user_data_dir()?.join("themes"))
+    Ok(user_data_dir_or_temp().join("themes"))
 }
 
 /// Initialize themes directory and theme files
@@ -133,9 +167,7 @@ pub fn get_state_file_path() -> PathBuf {
     if cfg!(debug_assertions) {
         PathBuf::from("target/state.json")
     } else {
-        get_user_data_dir()
-            .map(|dir| dir.join("state.json"))
-            .unwrap_or_else(|_| PathBuf::from("state.json"))
+        user_data_dir_or_temp().join("state.json")
     }
 }
 
@@ -146,9 +178,7 @@ pub fn get_workspace_config_path() -> PathBuf {
     if cfg!(debug_assertions) {
         PathBuf::from("target/workspace-config.json")
     } else {
-        get_user_data_dir()
-            .map(|dir| dir.join("workspace-config.json"))
-            .unwrap_or_else(|_| PathBuf::from("workspace-config.json"))
+        user_data_dir_or_temp().join("workspace-config.json")
     }
 }
 
@@ -159,9 +189,7 @@ pub fn get_docks_layout_path() -> PathBuf {
     if cfg!(debug_assertions) {
         PathBuf::from("target/docks-agentx.json")
     } else {
-        get_user_data_dir()
-            .map(|dir| dir.join("docks-agentx.json"))
-            .unwrap_or_else(|_| PathBuf::from("docks-agentx.json"))
+        user_data_dir_or_temp().join("docks-agentx.json")
     }
 }
 
@@ -172,8 +200,6 @@ pub fn get_sessions_dir() -> PathBuf {
     if cfg!(debug_assertions) {
         PathBuf::from("target/sessions")
     } else {
-        get_user_data_dir()
-            .map(|dir| dir.join("sessions"))
-            .unwrap_or_else(|_| PathBuf::from("sessions"))
+        user_data_dir_or_temp().join("sessions")
     }
 }

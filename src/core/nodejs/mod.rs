@@ -2,10 +2,10 @@ mod detector;
 mod error;
 mod installer_hint;
 
-pub use installer_hint::{generate_install_hint, PackageManager};
+pub use installer_hint::{PackageManager, generate_install_hint};
 
-use std::path::PathBuf;
 use anyhow::Result;
+use std::path::PathBuf;
 
 /// Result of Node.js availability check
 #[derive(Debug, Clone)]

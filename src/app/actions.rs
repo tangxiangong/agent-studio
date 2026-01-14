@@ -7,17 +7,86 @@ use agent_client_protocol::{ImageContent, ToolCall};
 use gpui::{Action, SharedString, actions};
 use gpui_component::{ThemeMode, dock::DockPlacement, scroll::ScrollbarShow};
 use serde::Deserialize;
+use std::path::PathBuf;
 
 // ============================================================================
 // Workspace Actions - 工作区相关操作
 // ============================================================================
 
-/// 添加面板到 Dock 区域
-///
-/// 参数为目标 DockPlacement，用于指定面板放置位置（Center/Left/Right/Bottom）
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+/// 面板类型及其参数
+#[derive(Clone, PartialEq, Deserialize)]
+pub enum PanelKind {
+    /// 对话面板，可选 session_id
+    Conversation { session_id: Option<String> },
+    /// 终端面板，可选工作目录
+    Terminal {
+        #[serde(skip)]
+        working_directory: Option<PathBuf>,
+    },
+    /// 欢迎面板，可选 workspace_id
+    Welcome { workspace_id: Option<String> },
+    /// 工具调用详情面板
+    ToolCallDetail {
+        tool_call_id: String,
+        tool_call: Box<ToolCall>,
+    },
+}
+
+/// 面板操作（添加/展示）
+#[derive(Clone, PartialEq, Deserialize)]
+pub enum PanelCommand {
+    Add {
+        panel: PanelKind,
+        #[serde(skip, default = "default_dock_placement")]
+        placement: DockPlacement,
+    },
+    Show(PanelKind),
+}
+
+/// 统一的面板操作 Action
+#[derive(Action, Clone, PartialEq, Deserialize)]
 #[action(namespace = story, no_json)]
-pub struct AddPanel(pub DockPlacement);
+pub struct PanelAction(pub PanelCommand);
+
+impl PanelAction {
+    pub fn add_conversation(placement: DockPlacement) -> Self {
+        Self(PanelCommand::Add {
+            panel: PanelKind::Conversation { session_id: None },
+            placement,
+        })
+    }
+
+    pub fn add_conversation_for_session(session_id: String, placement: DockPlacement) -> Self {
+        Self(PanelCommand::Add {
+            panel: PanelKind::Conversation {
+                session_id: Some(session_id),
+            },
+            placement,
+        })
+    }
+
+    pub fn add_terminal(placement: DockPlacement, working_directory: Option<PathBuf>) -> Self {
+        Self(PanelCommand::Add {
+            panel: PanelKind::Terminal { working_directory },
+            placement,
+        })
+    }
+
+    pub fn show_welcome(workspace_id: Option<String>) -> Self {
+        Self(PanelCommand::Show(PanelKind::Welcome { workspace_id }))
+    }
+
+    pub fn show_conversation(session_id: Option<String>) -> Self {
+        Self(PanelCommand::Show(PanelKind::Conversation { session_id }))
+    }
+
+    pub fn show_tool_call_detail(tool_call_id: String, tool_call: ToolCall) -> Self {
+        Self(PanelCommand::Show(PanelKind::ToolCallDetail {
+            tool_call_id,
+            tool_call: Box::new(tool_call),
+        }))
+    }
+}
 
 /// 切换面板的可见性
 ///
@@ -39,30 +108,8 @@ pub struct AddToolCallDetailPanel {
     pub placement: DockPlacement,
 }
 
-/// 添加会话面板
-///
-/// 用于创建并添加一个新的会话面板到工作区
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct AddSessionPanel {
-    /// 会话唯一标识符
-    pub session_id: String,
-    /// 面板放置位置，默认为 Center
-    #[serde(skip, default = "default_dock_placement")]
-    pub placement: DockPlacement,
-}
-
 fn default_dock_placement() -> DockPlacement {
     DockPlacement::Center
-}
-
-impl Default for AddSessionPanel {
-    fn default() -> Self {
-        Self {
-            session_id: String::new(),
-            placement: DockPlacement::Center,
-        }
-    }
 }
 
 // 切换 Dock 切换按钮的显示状态
@@ -212,79 +259,6 @@ actions!(
         ShowPanelInfo  // 显示面板信息
     ]
 );
-
-/// 添加终端面板到底部 Dock 区域
-///
-/// 用于创建并添加一个新的终端面板到工作区底部
-#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct AddTerminalPanel {
-    /// 面板放置位置，默认为 Bottom
-    #[serde(skip, default = "default_bottom_placement")]
-    pub placement: DockPlacement,
-    /// 可选的工作目录路径
-    #[serde(skip)]
-    pub working_directory: Option<std::path::PathBuf>,
-}
-
-fn default_bottom_placement() -> DockPlacement {
-    DockPlacement::Bottom
-}
-
-impl Default for AddTerminalPanel {
-    fn default() -> Self {
-        Self {
-            placement: DockPlacement::Bottom,
-            working_directory: None,
-        }
-    }
-}
-
-/// 显示欢迎面板
-///
-/// 可选参数:
-/// - workspace_id: 要在欢迎面板中显示的工作区 ID
-#[derive(Action, Clone, PartialEq, Deserialize)]
-#[action(namespace = story, no_json)]
-pub struct ShowWelcomePanel {
-    #[serde(default)]
-    pub workspace_id: Option<String>,
-}
-
-/// 显示对话面板
-///
-/// 参数为可选的 session_id，用于打开特定会话的对话面板
-/// 如果不提供 session_id，则创建一个新的对话面板
-#[derive(Action, Clone, PartialEq, Deserialize)]
-#[action(namespace = agentx, no_json)]
-pub struct ShowConversationPanel {
-    pub session_id: Option<String>,
-}
-
-impl ShowConversationPanel {
-    /// Create a new action to show conversation panel for a specific session
-    pub fn with_session(session_id: String) -> Self {
-        Self {
-            session_id: Some(session_id),
-        }
-    }
-
-    /// Create a new action to show conversation panel without a specific session
-    pub fn new() -> Self {
-        Self { session_id: None }
-    }
-}
-
-/// 显示工具调用详情面板
-///
-/// 用于在右侧显示完整的工具调用内容
-#[derive(Action, Clone, PartialEq, Deserialize)]
-#[action(namespace = agentx, no_json)]
-pub struct ShowToolCallDetail {
-    /// The tool call ID to display
-    pub tool_call_id: String,
-    pub tool_call: ToolCall,
-}
 
 // ============================================================================
 // Menu Actions - 菜单相关操作

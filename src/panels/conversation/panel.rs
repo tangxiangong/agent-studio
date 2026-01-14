@@ -104,11 +104,7 @@ impl ConversationPanel {
         Self::new_internal(Some(session_id), window, cx)
     }
 
-    fn new_internal(
-        session_id: Option<String>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Self {
+    fn new_internal(session_id: Option<String>, window: &mut Window, cx: &mut App) -> Self {
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
         let input_state = Self::create_input_state(window, cx);

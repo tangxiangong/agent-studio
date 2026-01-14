@@ -13,6 +13,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
 
 jobs:
   build-macos:
@@ -20,6 +21,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure git for private deps
+        run: git config --global url."https://x-access-token:${{ secrets.GPUI_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -68,6 +72,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Configure git for private deps
+        run: git config --global url."https://x-access-token:${{ secrets.GPUI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -92,6 +99,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure git for private deps
+        run: git config --global url."https://x-access-token:${{ secrets.GPUI_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
         run: |
@@ -220,4 +230,3 @@ jobs:
             ```
 
             For more details, see the [README](https://github.com/your-org/gpui-component/tree/main/agent-studio).
-

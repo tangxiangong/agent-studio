@@ -29,10 +29,7 @@ use crate::core::services::WorkspaceService;
 use crate::core::{event_bus::WorkspaceUpdateEvent, services::SessionStatus};
 use crate::panels::dock_panel::DockPanel;
 use crate::schemas::workspace_schema::WorkspaceTask;
-use crate::{
-    AddPanel, AddSessionPanel, AddTerminalPanel, AppState, ShowConversationPanel, ShowWelcomePanel, StatusIndicator,
-    utils,
-};
+use crate::{AppState, PanelAction, StatusIndicator, utils};
 
 // ============================================================================
 // Constants - Layout spacing
@@ -732,10 +729,7 @@ impl TaskPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let action = match self.session_id_for_task(task_id) {
-            Some(id) => ShowConversationPanel::with_session(id),
-            None => ShowConversationPanel::new(),
-        };
+        let action = PanelAction::show_conversation(self.session_id_for_task(task_id));
         window.dispatch_action(Box::new(action), cx);
     }
 
@@ -743,15 +737,18 @@ impl TaskPanel {
         match self.session_id_for_task(task_id) {
             Some(session_id) => {
                 window.dispatch_action(
-                    Box::new(AddSessionPanel {
+                    Box::new(PanelAction::add_conversation_for_session(
                         session_id,
-                        placement: DockPlacement::Center,
-                    }),
+                        DockPlacement::Center,
+                    )),
                     cx,
                 );
             }
             None => {
-                window.dispatch_action(Box::new(AddPanel(DockPlacement::Center)), cx);
+                window.dispatch_action(
+                    Box::new(PanelAction::add_conversation(DockPlacement::Center)),
+                    cx,
+                );
             }
         }
     }
@@ -1100,10 +1097,10 @@ impl TaskPanel {
                                             .on_click(
                                                 move |_, window, cx| {
                                                     window.dispatch_action(
-                                                        Box::new(AddTerminalPanel {
-                                                            placement: gpui_component::dock::DockPlacement::Bottom,
-                                                            working_directory: Some(workspace_path.clone()),
-                                                        }),
+                                                        Box::new(PanelAction::add_terminal(
+                                                            gpui_component::dock::DockPlacement::Bottom,
+                                                            Some(workspace_path.clone()),
+                                                        )),
                                                         cx,
                                                     );
                                                 },
@@ -1161,9 +1158,7 @@ impl TaskPanel {
             .hover(|s| s.bg(theme.accent.opacity(0.3)))
             .on_click(cx.listener(move |_this, _, window, cx| {
                 window.dispatch_action(
-                    Box::new(ShowWelcomePanel {
-                        workspace_id: Some(workspace_id.clone()),
-                    }),
+                    Box::new(PanelAction::show_welcome(Some(workspace_id.clone()))),
                     cx,
                 );
             }))

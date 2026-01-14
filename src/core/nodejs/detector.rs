@@ -1,7 +1,7 @@
+use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::process::Command;
-use anyhow::{Context, Result};
 
 use super::error;
 
@@ -53,7 +53,7 @@ pub async fn detect_system_nodejs() -> Option<PathBuf> {
         "/usr/local/bin/node",
         "/usr/bin/node",
         "/opt/homebrew/bin/node", // macOS Apple Silicon
-        "/opt/node/bin/node",      // Custom installations
+        "/opt/node/bin/node",     // Custom installations
     ];
 
     for path_str in standard_paths {
@@ -141,7 +141,10 @@ async fn check_nvm_windows() -> Option<PathBuf> {
 async fn check_nvm_unix() -> Option<PathBuf> {
     // NVM typically installs to ~/.nvm
     let home = std::env::var("HOME").ok()?;
-    let nvm_dir = PathBuf::from(home).join(".nvm").join("versions").join("node");
+    let nvm_dir = PathBuf::from(home)
+        .join(".nvm")
+        .join("versions")
+        .join("node");
 
     if !nvm_dir.exists() {
         return None;
@@ -243,7 +246,9 @@ pub async fn verify_nodejs_executable(path: &Path) -> Result<String> {
             let version = String::from_utf8_lossy(&output.stdout);
             let version = version.trim().to_string();
 
-            if version.starts_with('v') || version.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+            if version.starts_with('v')
+                || version.chars().next().map_or(false, |c| c.is_ascii_digit())
+            {
                 log::info!("Verified Node.js at {}: {}", path.display(), version);
                 Ok(version)
             } else {
@@ -263,9 +268,7 @@ pub async fn verify_nodejs_executable(path: &Path) -> Result<String> {
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             Err(error::permission_denied_error(path.display().to_string()))
         }
-        Err(e) => Err(e).with_context(|| {
-            format!("Failed to execute {}", path.display())
-        }),
+        Err(e) => Err(e).with_context(|| format!("Failed to execute {}", path.display())),
     }
 }
 

@@ -162,6 +162,7 @@ mod tests {
             command: "test-command".to_string(),
             args: vec![],
             env: HashMap::new(),
+            nodejs_path: None,
         };
 
         bus.publish(AgentConfigEvent::AgentAdded {
@@ -192,6 +193,7 @@ mod tests {
             command: "test".to_string(),
             args: vec![],
             env: HashMap::new(),
+            nodejs_path: None,
         };
 
         bus.publish(AgentConfigEvent::AgentRemoved {

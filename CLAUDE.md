@@ -459,9 +459,8 @@ Saving is debounced by 10 seconds and also triggered on app quit.
 All actions are centralized in `src/app/actions.rs`. Categories include:
 
 **Workspace Actions:**
-- `AddPanel(DockPlacement)`: Add panel to dock
+- `PanelAction`: Add/show panels (conversation/terminal/welcome/tool call detail)
 - `TogglePanelVisible(SharedString)`: Show/hide panels
-- `AddSessionPanel { session_id, placement }`: Create conversation panel
 
 **Session Actions:**
 - `NewSessionConversationPanel`: Create new session
@@ -475,7 +474,7 @@ All actions are centralized in `src/app/actions.rs`. Categories include:
 
 **UI Actions:**
 - `SelectFont`, `SelectLocale`, `SelectRadius`, `SelectScrollbarShow`
-- `ShowWelcomePanel`, `ShowConversationPanel`, `ShowToolCallDetail`
+- (Panel display is handled by `PanelAction`)
 
 ### Update System
 

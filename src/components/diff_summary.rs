@@ -258,12 +258,12 @@ impl DiffSummary {
             .w_full()
             .on_mouse_down(gpui::MouseButton::Left, move |_event, window, cx| {
                 if let Some(tool_call) = data.find_tool_call_for_file(&file_path) {
-                    use crate::ShowToolCallDetail;
+                    use crate::PanelAction;
                     window.dispatch_action(
-                        Box::new(ShowToolCallDetail {
-                            tool_call_id: tool_call.tool_call_id.to_string(),
+                        Box::new(PanelAction::show_tool_call_detail(
+                            tool_call.tool_call_id.to_string(),
                             tool_call,
-                        }),
+                        )),
                         cx,
                     );
                 }

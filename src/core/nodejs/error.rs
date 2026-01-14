@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 
 /// Helper functions for creating user-friendly Node.js error messages
-
 /// Create error for Node.js not found with installation hint
 pub fn nodejs_not_found_error(install_hint: String) -> anyhow::Error {
     anyhow!(
@@ -38,4 +37,3 @@ pub fn permission_denied_error(path: String) -> anyhow::Error {
         path
     )
 }
-

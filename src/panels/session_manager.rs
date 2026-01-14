@@ -191,12 +191,12 @@ impl SessionManagerPanel {
 
     /// Open a conversation panel for the given session
     fn open_session(&self, session_id: String, window: &mut Window, cx: &mut Context<Self>) {
-        // Dispatch AddSessionPanel action to open the conversation panel
+        // Dispatch PanelAction to open the conversation panel
         window.dispatch_action(
-            Box::new(crate::AddSessionPanel {
+            Box::new(crate::PanelAction::add_conversation_for_session(
                 session_id,
-                placement: gpui_component::dock::DockPlacement::Center,
-            }),
+                gpui_component::dock::DockPlacement::Center,
+            )),
             cx,
         );
     }

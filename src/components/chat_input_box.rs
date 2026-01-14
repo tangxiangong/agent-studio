@@ -429,9 +429,7 @@ impl RenderOnce for ChatInputBox {
                                     .border_1()
                                     .border_color(border_color)
                                     .child(
-                                        Icon::new(icon_name)
-                                            .size(px(13.))
-                                            .text_color(icon_color),
+                                        Icon::new(icon_name).size(px(13.)).text_color(icon_color),
                                     )
                                     .child(
                                         div()
@@ -477,8 +475,7 @@ impl RenderOnce for ChatInputBox {
                                         .and_then(|n| n.to_str())
                                         .unwrap_or(&selection.file_path);
 
-                                    let display_text = if selection.start_line
-                                        == selection.end_line
+                                    let display_text = if selection.start_line == selection.end_line
                                     {
                                         format!("{}:{}", filename, selection.start_line)
                                     } else {
@@ -502,10 +499,8 @@ impl RenderOnce for ChatInputBox {
                             ));
 
                             attachment_chips.extend(
-                                self.selected_files
-                                    .into_iter()
-                                    .enumerate()
-                                    .map(|(idx, file_path)| {
+                                self.selected_files.into_iter().enumerate().map(
+                                    |(idx, file_path)| {
                                         let filename = std::path::Path::new(&file_path)
                                             .file_name()
                                             .and_then(|n| n.to_str())
@@ -522,7 +517,8 @@ impl RenderOnce for ChatInputBox {
                                             theme.foreground.opacity(0.7),
                                             self.on_remove_file.clone(),
                                         )
-                                    }),
+                                    },
+                                ),
                             );
 
                             h_flex()

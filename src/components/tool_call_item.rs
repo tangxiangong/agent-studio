@@ -15,7 +15,7 @@ use gpui_component::{
 };
 use similar::{ChangeTag, TextDiff};
 
-use crate::ShowToolCallDetail;
+use crate::PanelAction;
 use crate::components::DiffView;
 use crate::panels::conversation::types::{ToolCallStatusExt, ToolKindExt};
 use crate::utils::tool_call::{extract_terminal_output, extract_xml_content, truncate_lines};
@@ -320,9 +320,7 @@ impl Render for ToolCallItem {
                                 ),
                         )
                     })
-                    .child(
-                        status_icon.size(px(14.)).text_color(status_color),
-                    )
+                    .child(status_icon.size(px(14.)).text_color(status_color))
                     .when(has_content, |this| {
                         let tool_call_clone_for_detail = self.tool_call.clone();
                         this.child(
@@ -353,13 +351,11 @@ impl Render for ToolCallItem {
                                     .ghost()
                                     .xsmall()
                                     .on_click(cx.listener(move |_, _ev, window, cx| {
-                                        let action = ShowToolCallDetail {
-                                            tool_call_id: tool_call_id.clone(),
-                                            tool_call: tool_call_clone_for_detail.clone(),
-                                        };
-                                        log::debug!(
-                                            "Dispatching ShowToolCallDetail action from ToolCallItem"
+                                        let action = PanelAction::show_tool_call_detail(
+                                            tool_call_id.clone(),
+                                            tool_call_clone_for_detail.clone(),
                                         );
+                                        log::debug!("Dispatching PanelAction from ToolCallItem");
                                         window.dispatch_action(Box::new(action), cx);
                                     })),
                                 ),
@@ -369,15 +365,12 @@ impl Render for ToolCallItem {
             // Content - only visible when open and has content
             .when(has_content, |this| {
                 this.content(
-                    v_flex()
-                        .gap_2()
-                        .pl_8()
-                        .children(
-                            self.tool_call
-                                .content
-                                .iter()
-                                .map(|content| self.render_content(content, window, cx)),
-                        ),
+                    v_flex().gap_2().pl_8().children(
+                        self.tool_call
+                            .content
+                            .iter()
+                            .map(|content| self.render_content(content, window, cx)),
+                    ),
                 )
                 .max_h(px(300.))
                 .overflow_hidden()

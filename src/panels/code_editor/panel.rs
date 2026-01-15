@@ -14,6 +14,7 @@ use gpui_component::{
     v_flex,
 };
 use lsp_types::{CodeActionKind, TextEdit, WorkspaceEdit};
+use rust_i18n::t;
 
 use super::lsp_providers::TextConvertor;
 use super::lsp_store::CodeEditorPanelLspStore;
@@ -375,7 +376,7 @@ impl CodeEditorPanel {
         Button::new("line-number")
             .ghost()
             .xsmall()
-            .tooltip("Toggle Line Number")
+            .tooltip(t!("code_editor.tooltip.line_number").to_string())
             .child(
                 Icon::new(crate::assets::Icon::Hash)
                     .size(px(16.))
@@ -398,7 +399,7 @@ impl CodeEditorPanel {
         Button::new("soft-wrap")
             .ghost()
             .xsmall()
-            .tooltip("Toggle Soft Wrap")
+            .tooltip(t!("code_editor.tooltip.soft_wrap").to_string())
             .child(
                 Icon::new(crate::assets::Icon::TextWrap)
                     .size(px(16.))
@@ -425,7 +426,7 @@ impl CodeEditorPanel {
         Button::new("indent-guides")
             .ghost()
             .xsmall()
-            .tooltip("Toggle Indent Guides")
+            .tooltip(t!("code_editor.tooltip.indent_guides").to_string())
             .child(
                 Icon::new(crate::assets::Icon::ListTree)
                     .size(px(16.))
@@ -455,7 +456,7 @@ impl CodeEditorPanel {
         Button::new("line-column")
             .ghost()
             .xsmall()
-            .tooltip("Go to Line")
+            .tooltip(t!("code_editor.tooltip.go_to_line").to_string())
             .child(
                 h_flex()
                     .gap_1p5()

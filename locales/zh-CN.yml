@@ -133,6 +133,10 @@ welcome.session.item: "会话 %{id}"
 welcome.loading: "正在加载中..."
 
 code_editor.title: "编辑器"
+code_editor.tooltip.line_number: "切换行号"
+code_editor.tooltip.soft_wrap: "切换自动换行"
+code_editor.tooltip.indent_guides: "切换缩进辅助线"
+code_editor.tooltip.go_to_line: "跳转到行"
 
 terminal.title: "终端"
 

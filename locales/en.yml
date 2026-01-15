@@ -133,6 +133,10 @@ welcome.session.item: "Session %{id}"
 welcome.loading: "Loading..."
 
 code_editor.title: "Code Editor"
+code_editor.tooltip.line_number: "Toggle Line Number"
+code_editor.tooltip.soft_wrap: "Toggle Soft Wrap"
+code_editor.tooltip.indent_guides: "Toggle Indent Guides"
+code_editor.tooltip.go_to_line: "Go to Line"
 
 terminal.title: "Terminal"
 

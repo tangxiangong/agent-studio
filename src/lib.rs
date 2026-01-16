@@ -224,7 +224,11 @@ pub fn init(cx: &mut App) {
             }
         };
 
-        Box::new(DockPanelContainer::panel_from_state(&story_state, window, cx))
+        Box::new(DockPanelContainer::panel_from_state(
+            &story_state,
+            window,
+            cx,
+        ))
     });
 
     cx.activate(true);

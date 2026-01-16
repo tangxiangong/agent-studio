@@ -13,11 +13,11 @@ use gpui_component::{
 use rust_i18n::t;
 use serde::{Deserialize, Serialize};
 
+use crate::AppState;
 use crate::panels::{
     CodeEditorPanel, ConversationPanel, SessionManagerPanel, SettingsPanel, TaskPanel,
     TerminalPanel, ToolCallDetailPanel, WelcomePanel,
 };
-use crate::AppState;
 use crate::{ShowPanelInfo, ToggleSearch};
 
 #[derive(IntoElement)]
@@ -359,7 +359,8 @@ impl DockPanelContainer {
         let name = WelcomePanel::title();
         let title_key = WelcomePanel::title_key();
         let description = WelcomePanel::description();
-        let story = WelcomePanel::view_with_workspace_and_dir(workspace_id, working_directory, window, cx);
+        let story =
+            WelcomePanel::view_with_workspace_and_dir(workspace_id, working_directory, window, cx);
         let story_klass = WelcomePanel::klass();
 
         let view = cx.new(|cx| {
@@ -470,14 +471,12 @@ impl DockPanelContainer {
                 let workspace_id = story_state.workspace_id.clone();
 
                 match (workspace_id, working_dir) {
-                    (Some(workspace_id), Some(working_dir)) => {
-                        Self::panel_for_welcome_with_dir(
-                            Some(workspace_id),
-                            working_dir,
-                            window,
-                            cx,
-                        )
-                    }
+                    (Some(workspace_id), Some(working_dir)) => Self::panel_for_welcome_with_dir(
+                        Some(workspace_id),
+                        working_dir,
+                        window,
+                        cx,
+                    ),
                     (Some(workspace_id), None) => {
                         Self::panel_for_workspace(workspace_id, window, cx)
                     }

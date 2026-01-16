@@ -98,7 +98,8 @@ impl CodeEditorPanel {
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
 
         let tree_state = cx.new(|cx| TreeState::new(cx));
-        let working_dir = working_dir.unwrap_or_else(|| AppState::global(cx).current_working_dir().clone());
+        let working_dir =
+            working_dir.unwrap_or_else(|| AppState::global(cx).current_working_dir().clone());
         Self::load_files(tree_state.clone(), working_dir.clone(), cx);
 
         let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
@@ -378,7 +379,7 @@ impl CodeEditorPanel {
                         cx.theme().accent_foreground
                     } else {
                         cx.theme().muted_foreground
-                    })
+                    }),
             )
             .on_click(cx.listener(|this, _, window, cx| {
                 this.line_number = !this.line_number;
@@ -400,7 +401,7 @@ impl CodeEditorPanel {
                         cx.theme().accent_foreground
                     } else {
                         cx.theme().muted_foreground
-                    })
+                    }),
             )
             .on_click(cx.listener(|this, _, window, cx| {
                 this.soft_wrap = !this.soft_wrap;
@@ -426,7 +427,7 @@ impl CodeEditorPanel {
                         cx.theme().accent_foreground
                     } else {
                         cx.theme().muted_foreground
-                    })
+                    }),
             )
             .on_click(cx.listener(|this, _, window, cx| {
                 this.indent_guides = !this.indent_guides;
@@ -458,7 +459,7 @@ impl CodeEditorPanel {
                         position.line + 1,
                         position.character + 1,
                         cursor
-                    ))
+                    )),
             )
             .on_click(cx.listener(Self::go_to_line))
     }

@@ -75,6 +75,12 @@ impl DockWorkspace {
         })
         .detach();
 
+        cx.on_release(|this, cx| {
+            this.flush_layout_state(cx);
+            crate::themes::save_state(cx);
+        })
+        .detach();
+
         let title_bar = cx.new(|cx| {
             AppTitleBar::new("Agent Studio", window, cx).child({
                 move |_, cx| {
@@ -180,8 +186,19 @@ impl DockWorkspace {
         }));
     }
 
+    fn flush_layout_state(&mut self, cx: &mut App) {
+        let state = self.dock_area.read(cx).dump(cx);
+        if Some(&state) == self.last_layout_state.as_ref() {
+            return;
+        }
+        if let Err(e) = Self::save_state(&state) {
+            log::warn!("Failed to save layout state: {}", e);
+        }
+        self.last_layout_state = Some(state);
+    }
+
     fn save_state(state: &DockAreaState) -> Result<()> {
-        println!("Save layout...");
+        println!("Save Docks layout...");
         let json = serde_json::to_string_pretty(state)?;
         let state_file = crate::core::config_manager::get_docks_layout_path();
         if let Some(parent) = state_file.parent() {
@@ -196,6 +213,7 @@ impl DockWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<()> {
+        println!("Load Docks layout...");
         let state_file = crate::core::config_manager::get_docks_layout_path();
         let json = std::fs::read_to_string(state_file)?;
         let state = serde_json::from_str::<DockAreaState>(&json)?;

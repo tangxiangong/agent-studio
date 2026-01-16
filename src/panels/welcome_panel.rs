@@ -337,7 +337,12 @@ impl WelcomePanel {
         .detach();
     }
 
-    fn new(workspace_id: Option<String>, working_directory: Option<std::path::PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(
+        workspace_id: Option<String>,
+        working_directory: Option<std::path::PathBuf>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let input_state = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("markdown")
@@ -349,7 +354,8 @@ impl WelcomePanel {
 
         // Get the working directory - use provided or get from AppState
         // If workspace_id is provided, we'll update it asynchronously in load_workspace_info
-        let working_dir = working_directory.unwrap_or_else(|| AppState::global(cx).current_working_dir().clone());
+        let working_dir =
+            working_directory.unwrap_or_else(|| AppState::global(cx).current_working_dir().clone());
 
         let context_list = cx.new(|cx| {
             let delegate = FilePickerDelegate::new(&working_dir);
@@ -1189,7 +1195,7 @@ impl WelcomePanel {
         let available_mcps = self.available_mcps.clone();
         let selected_mcps = self.selected_mcps.clone();
         let mcp_selection_initialized = self.mcp_selection_initialized;
-        let cwd = self.working_directory.clone();  // 使用面板的工作目录
+        let cwd = self.working_directory.clone(); // 使用面板的工作目录
 
         let weak_self = cx.entity().downgrade();
         let agent_name_for_session = agent_name.clone();

@@ -345,7 +345,12 @@ impl DockWorkspace {
                     self.add_terminal_panel_to(working_directory.clone(), *placement, window, cx);
                 }
                 PanelKind::CodeEditor { working_directory } => {
-                    self.add_code_editor_panel_to(working_directory.clone(), *placement, window, cx);
+                    self.add_code_editor_panel_to(
+                        working_directory.clone(),
+                        *placement,
+                        window,
+                        cx,
+                    );
                 }
                 PanelKind::Welcome { workspace_id } => {
                     self.add_welcome_panel_to(workspace_id.clone(), *placement, window, cx);
@@ -447,7 +452,11 @@ impl DockWorkspace {
     ) {
         // Create WelcomePanel with optional workspace_id
         let panel = if let Some(workspace_id) = workspace_id {
-            Arc::new(DockPanelContainer::panel_for_workspace(workspace_id, window, cx))
+            Arc::new(DockPanelContainer::panel_for_workspace(
+                workspace_id,
+                window,
+                cx,
+            ))
         } else {
             Arc::new(DockPanelContainer::panel::<WelcomePanel>(window, cx))
         };

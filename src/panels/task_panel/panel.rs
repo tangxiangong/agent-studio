@@ -1259,6 +1259,8 @@ impl TaskPanel {
                         div()
                             .text_xs()
                             .text_color(theme.muted_foreground)
+                            .min_w(px(60.0)) // Fixed width to prevent layout shift
+                            .text_right()
                             .child(self.format_relative_time(&task.created_at)),
                     ),
             )
@@ -1464,6 +1466,8 @@ impl TaskPanel {
                         div()
                             .text_xs()
                             .text_color(theme.muted_foreground)
+                            .min_w(px(60.0)) // Fixed width to prevent layout shift
+                            .text_right()
                             .child(self.format_relative_time(&task.created_at)),
                     ),
             )

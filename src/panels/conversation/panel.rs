@@ -4,12 +4,12 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName, h_flex, input::InputState, skeleton::Skeleton, spinner::Spinner,
-    v_flex,
+    ActiveTheme, Icon, IconName, Sizable, StyledExt, h_flex, input::InputState,
+    skeleton::Skeleton, spinner::Spinner, v_flex,
 };
 
 // Use the published ACP schema crate
-use agent_client_protocol::{ContentChunk, ImageContent, SessionUpdate, ToolCall};
+use agent_client_protocol::{ContentChunk, ImageContent, PlanEntryStatus, SessionUpdate, ToolCall};
 use chrono::{DateTime, Utc};
 use rust_i18n::t;
 use std::time::Duration;
@@ -932,130 +932,83 @@ impl ConversationPanel {
         .detach();
     }
 
-    /// Render the loading skeleton when session is in progress
-    fn render_loading_skeleton(&self) -> impl IntoElement {
-        v_flex().gap_3().w_full().child(
-            h_flex()
-                .items_start()
-                .gap_2()
-                // Agent icon skeleton (circular, same size as agent icon)
-                .child(Skeleton::new().size(px(16.)).rounded_full().mt_1())
-                // Message content skeleton (2-3 lines with different widths)
-                .child(
-                    v_flex()
-                        .w_full()
-                        .gap_2()
-                        .child(Skeleton::new().w(px(300.)).h_4().rounded_md())
-                        .child(Skeleton::new().w(px(250.)).h_4().rounded_md())
-                        .child(Skeleton::new().w(px(200.)).h_4().rounded_md()),
-                ),
-        )
-    }
+    /// Render the loading skeleton and status info when session is in progress
+    fn render_loading_skeleton(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        // Only show loading skeleton when session is actively processing
+        let should_show_loading = self.session_status.as_ref().map_or(false, |status_info| {
+            matches!(
+                status_info.status,
+                SessionStatus::InProgress | SessionStatus::Pending
+            )
+        });
 
-    /// Render the status bar at the bottom of the conversation panel
-    fn render_status_bar(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let status_info = self.session_status.as_ref()?;
+        if !should_show_loading {
+            return v_flex().into_any_element();
+        }
 
-        // Format last active time
-        let now = chrono::Utc::now();
-        let duration = now.signed_duration_since(status_info.last_active);
-        let time_str = if duration.num_seconds() < 60 {
-            "just now".to_string()
-        } else if duration.num_minutes() < 60 {
-            format!("{}m ago", duration.num_minutes())
-        } else if duration.num_hours() < 24 {
-            format!("{}h ago", duration.num_hours())
-        } else {
-            format!("{}d ago", duration.num_days())
-        };
+        // Find the current todo from Plan entries
+        let current_todo = self.rendered_items.iter().rev().find_map(|item| {
+            if let RenderedItem::Plan(plan) = item {
+                plan.entries
+                    .iter()
+                    .find(|entry| entry.status == PlanEntryStatus::InProgress)
+                    .map(|entry| entry.content.clone())
+            } else {
+                None
+            }
+        });
 
-        // Status icon and color based on session status
+        // Build status indicator row
+        let status_info = self.session_status.as_ref().unwrap(); // Safe because of check above
         let (status_icon, status_color) = match status_info.status {
-            SessionStatus::Active => (IconName::CircleCheck, cx.theme().success),
             SessionStatus::InProgress => (IconName::Loader, cx.theme().primary),
             SessionStatus::Pending => (IconName::LoaderCircle, cx.theme().warning),
-            SessionStatus::Idle => (IconName::Moon, cx.theme().muted_foreground),
-            SessionStatus::Closed => (IconName::CircleX, cx.theme().red),
-            SessionStatus::Completed => (IconName::CircleCheck, cx.theme().success),
-            SessionStatus::Failed => (IconName::CircleX, cx.theme().red),
+            _ => return v_flex().into_any_element(), // Fallback
         };
 
-        let status_text = format!("{:?}", status_info.status);
+        // Calculate elapsed time from last_active
+        let now = chrono::Utc::now();
+        let duration = now.signed_duration_since(status_info.last_active);
+        let total_seconds = duration.num_seconds().max(0) as u64;
+        let hours = total_seconds / 3600;
+        let minutes = (total_seconds % 3600) / 60;
+        let seconds = total_seconds % 60;
+        let elapsed_time = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
 
-        Some(
-            div()
-                .flex_none()
-                .w_full()
-                .border_t_1()
-                .border_color(cx.theme().border)
-                .bg(cx.theme().muted.opacity(0.3))
-                .px_4()
-                .py_2()
-                .child(
-                    h_flex()
-                        .items_center()
-                        .justify_between()
-                        .gap_4()
-                        .child(
-                            // Left side: agent name and status
-                            h_flex()
-                                .items_center()
-                                .gap_3()
-                                .child(
+        // Main skeleton layout: horizontal layout with avatar spinner + status info + content skeletons
+        v_flex()
+            .w_full()
+            .gap_3()
+            .child(
+                // Top row: Spinner avatar + status info (task + time) horizontally aligned
+                h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                        // Agent avatar as spinner with status icon
+                        Spinner::new()
+                            .icon(status_icon.clone())
+                            .with_size(gpui_component::Size::Medium)
+                            .color(status_color),
+                    )
+                    .child(
+                        // Status info row: task + time
+                        h_flex()
+                            .items_center()
+                            .gap_2p5()
+                            .flex_1()
+                            .when_some(current_todo, |this, todo| {
+                                // Current task indicator
+                                this.child(
                                     h_flex()
                                         .items_center()
-                                        .gap_2()
+                                        .gap_1p5()
+                                        .px_2()
+                                        .py_1()
+                                        .rounded(cx.theme().radius)
+                                        .bg(cx.theme().muted.opacity(0.5))
                                         .child(
-                                            Icon::new(IconName::Bot)
-                                                .size(px(14.))
-                                                .text_color(cx.theme().muted_foreground),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_sm()
-                                                .font_weight(gpui::FontWeight::MEDIUM)
-                                                .text_color(cx.theme().foreground)
-                                                .child(status_info.agent_name.clone()),
-                                        ),
-                                )
-                                .child(
-                                    h_flex()
-                                        .items_center()
-                                        .gap_1()
-                                        .when_else(
-                                            status_info.status == SessionStatus::InProgress,
-                                            |this| {
-                                                this.child(Spinner::new().icon(status_icon.clone()))
-                                                    .size(px(12.))
-                                                    .text_color(status_color)
-                                            },
-                                            |this| {
-                                                this.child(
-                                                    Icon::new(status_icon.clone())
-                                                        .size(px(12.))
-                                                        .text_color(status_color),
-                                                )
-                                            },
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(status_color)
-                                                .child(status_text),
-                                        ),
-                                ),
-                        )
-                        .child(
-                            // Right side: last active time and message count
-                            h_flex()
-                                .items_center()
-                                .gap_4()
-                                .child(
-                                    h_flex()
-                                        .items_center()
-                                        .gap_1()
-                                        .child(
-                                            Icon::new(IconName::Info)
+                                            Icon::new(crate::assets::Icon::ListTodo)
                                                 .size(px(12.))
                                                 .text_color(cx.theme().muted_foreground),
                                         )
@@ -1063,33 +1016,70 @@ impl ConversationPanel {
                                             div()
                                                 .text_xs()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child(time_str),
+                                                .max_w(px(400.))
+                                                .overflow_hidden()
+                                                .text_ellipsis()
+                                                .whitespace_nowrap()
+                                                .child(todo),
                                         ),
                                 )
-                                .when(status_info.message_count > 0, |this| {
-                                    this.child(
-                                        h_flex()
-                                            .items_center()
-                                            .gap_1()
-                                            .child(
-                                                Icon::new(IconName::File)
-                                                    .size(px(12.))
-                                                    .text_color(cx.theme().muted_foreground),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(cx.theme().muted_foreground)
-                                                    .child(format!(
-                                                        "{}",
-                                                        status_info.message_count
-                                                    )),
-                                            ),
+                            })
+                            .child(
+                                // Elapsed time display
+                                h_flex()
+                                    .items_center()
+                                    .gap_1p5()
+                                    .child(
+                                        Icon::new(IconName::Info)
+                                            .size(px(12.))
+                                            .text_color(cx.theme().muted_foreground),
                                     )
-                                }),
-                        ),
-                ),
-        )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(elapsed_time),
+                                    ),
+                            ),
+                    ),
+            )
+            .child(
+                // Content skeletons - indented to align with text content
+                h_flex()
+                    .gap_3()
+                    .child(
+                        // Spacer to align with content (matches spinner width)
+                        div().w(px(24.)),
+                    )
+                    .child(
+                        // Message content skeletons - simulate text lines with varying widths
+                        v_flex()
+                            .flex_1()
+                            .gap_2()
+                            .child(
+                                Skeleton::new()
+                                    .w_full()
+                                    .max_w(px(480.))
+                                    .h(px(16.))
+                                    .rounded(cx.theme().radius),
+                            )
+                            .child(
+                                Skeleton::new()
+                                    .w_full()
+                                    .max_w(px(420.))
+                                    .h(px(16.))
+                                    .rounded(cx.theme().radius),
+                            )
+                            .child(
+                                Skeleton::new()
+                                    .w_full()
+                                    .max_w(px(360.))
+                                    .h(px(16.))
+                                    .rounded(cx.theme().radius),
+                            ),
+                    ),
+            )
+            .into_any_element()
     }
 }
 
@@ -1180,12 +1170,8 @@ impl Render for ConversationPanel {
             }
         }
 
-        // Add loading skeleton when session is in progress
-        if let Some(status_info) = &self.session_status {
-            if status_info.status == SessionStatus::InProgress {
-                children = children.child(self.render_loading_skeleton());
-            }
-        }
+        // Add loading skeleton when session is in progress (conditional rendering handled in function)
+        children = children.child(self.render_loading_skeleton(cx));
 
         // Main layout: vertical flex with scroll area on top and input box at bottom
         v_flex()
@@ -1222,9 +1208,6 @@ impl Render for ConversationPanel {
                             .child(children)
                     }),
             )
-            .when_some(self.render_status_bar(cx), |this, status_bar| {
-                this.child(status_bar)
-            })
             .child(
                 // Chat input box at bottom (fixed, not scrollable)
                 div()

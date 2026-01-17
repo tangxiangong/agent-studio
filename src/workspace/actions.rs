@@ -879,8 +879,19 @@ impl DockWorkspace {
                 let conversation_item =
                     DockItem::tab(conversation_panel, &dock_area.downgrade(), window, cx);
 
+                // Wrap in split_with_sizes to ensure proper StackPanel hierarchy
+                // This is required for zoom functionality and proper layout persistence
+                let conversation_dock = DockItem::split_with_sizes(
+                    Axis::Horizontal,
+                    vec![conversation_item],
+                    vec![None],
+                    &dock_area.downgrade(),
+                    window,
+                    cx,
+                );
+
                 dock_area.update(cx, |dock_area, cx| {
-                    dock_area.set_center(conversation_item, window, cx);
+                    dock_area.set_center(conversation_dock, window, cx);
 
                     // Collapse right and bottom docks
                     if dock_area.is_dock_open(DockPlacement::Right, cx) {

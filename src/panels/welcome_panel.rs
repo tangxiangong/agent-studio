@@ -510,39 +510,50 @@ impl WelcomePanel {
             .collect()
     }
 
-    /// Try to refresh agents list from AppState if we don't have agents yet
+    /// Try to refresh agents list from AppState
     fn try_refresh_agents(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.has_agents {
-            return;
-        }
-
         let agent_service = match AppState::global(cx).agent_service() {
             Some(service) => service.clone(),
             None => return,
         };
 
         let agent_select = self.agent_select.clone();
+        let current_selection = self.agent_select.read(cx).selected_value().cloned();
+        let no_agents_label = Self::no_agents_label();
         let weak_self = cx.entity().downgrade();
         cx.spawn_in(window, async move |_this, window| {
             let agents = agent_service.list_agents().await;
 
-            if agents.is_empty() {
-                return;
-            }
-
             _ = window.update(|window, cx| {
                 if let Some(this) = weak_self.upgrade() {
                     this.update(cx, |this, cx| {
-                        // We now have agents, update the select
+                        if agents.is_empty() {
+                            this.has_agents = false;
+                            agent_select.update(cx, |state, cx| {
+                                state.set_items(
+                                    vec![AgentItem::new(no_agents_label.clone())],
+                                    window,
+                                    cx,
+                                );
+                                state.set_selected_index(Some(IndexPath::default()), window, cx);
+                            });
+                            cx.notify();
+                            return;
+                        }
+
                         this.has_agents = true;
                         let agent_items: Vec<AgentItem> = agents
                             .clone()
                             .into_iter()
                             .map(|name| AgentItem::new(name))
                             .collect();
+                        let selected_index = current_selection
+                            .as_ref()
+                            .and_then(|name| agents.iter().position(|agent| agent == name))
+                            .unwrap_or(0);
                         agent_select.update(cx, |state, cx| {
                             state.set_items(agent_items, window, cx);
-                            state.set_selected_index(Some(IndexPath::default()), window, cx);
+                            state.set_selected_index(Some(IndexPath::new(selected_index)), window, cx);
                         });
                         cx.notify();
                     });

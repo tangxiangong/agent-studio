@@ -6,11 +6,7 @@ use rust_i18n::t;
 use std::collections::HashSet;
 
 use gpui_component::{
-    ActiveTheme, IndexPath, StyledExt,
-    input::InputState,
-    list::ListState,
-    select::{SelectEvent, SelectState},
-    v_flex,
+    ActiveTheme, IndexPath, StyledExt, WindowExt, input::InputState, list::ListState, notification::Notification, select::{SelectEvent, SelectState}, v_flex
 };
 
 use agent_client_protocol::{self as acp, AvailableCommand, ImageContent};
@@ -1240,7 +1236,7 @@ impl WelcomePanel {
             );
 
             match agent_service
-                .create_session_with_mcp_and_cwd(&agent_name_for_session, mcp_servers, cwd)
+                .create_session_with_mcp_and_cwd(&agent_name_for_session, mcp_servers, cwd.clone())
                 .await
             {
                 Ok(session_id) => {
@@ -1263,12 +1259,46 @@ impl WelcomePanel {
                 }
                 Err(e) => {
                     log::error!("[WelcomePanel] Failed to create session: {}", e);
-                    _ = window.update(|_window, cx| {
+
+                    // Provide detailed error context
+                    let (error_message, error_details) = if e.to_string().contains("server shut down unexpectedly") {
+                        let details = format!(
+                            "Agent '{}' process crashed during session creation. \
+                            Possible reasons:\n\
+                            1. npx/@zed-industries/claude-code-acp is not installed (run: npm install -g @zed-industries/claude-code-acp)\n\
+                            2. Working directory '{}' does not exist or is not accessible\n\
+                            3. Node.js is not properly installed or configured\n\
+                            4. The agent binary has bugs or incompatibilities\n\n\
+                            Original error: {}",
+                            agent_name_for_session,
+                            cwd.display(),
+                            e
+                        );
+                        (
+                            format!("Failed to create session: Agent '{}' crashed", agent_name_for_session),
+                            details
+                        )
+                    } else {
+                        (
+                            format!("Failed to create session: {}", e),
+                            e.to_string()
+                        )
+                    };
+
+                    log::error!("[WelcomePanel] {}", error_details);
+
+                    _ = window.update(|window, cx| {
                         if let Some(this) = weak_self.upgrade() {
                             this.update(cx, |this, cx| {
                                 this.is_session_loading = false;
                                 cx.notify();
                             });
+
+                            // Show error notification to user
+                            struct SessionCreationError;
+                            let note = Notification::error(error_message)
+                                .id::<SessionCreationError>();
+                            window.push_notification(note, cx);
                         }
                     });
                 }

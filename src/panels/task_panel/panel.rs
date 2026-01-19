@@ -1047,7 +1047,6 @@ impl TaskPanel {
         let workspace_id = workspace.id.clone();
         let is_expanded = workspace.is_expanded;
         let workspace_name = workspace.name.clone();
-        let task_count = workspace.tasks.len();
 
         // Sort tasks by created_at descending (newest first)
         let mut sorted_tasks = workspace.tasks.clone();
@@ -1097,14 +1096,6 @@ impl TaskPanel {
                         h_flex()
                             .gap_2()
                             .items_center()
-                            .when(task_count > 0, |this| {
-                                this.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(theme.muted_foreground)
-                                        .child(format!("{}", task_count)),
-                                )
-                            })
                             .child({
                                 let workspace_id = workspace_id.clone();
                                 let workspace_path = workspace.path.clone();

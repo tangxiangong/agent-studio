@@ -596,7 +596,7 @@ async fn agent_event_loop(
 
     let io_handle = tokio::task::spawn_local(async move {
         if let Err(err) = io_task.await {
-            warn!("agent I/O task ended: {:?}", err);
+            error!("agent I/O task ended: {:?}", err);
         }
     });
     // Assuming `InitializeRequest` and `Implementation` have `new` methods or implement `Default`
@@ -636,7 +636,33 @@ async fn agent_event_loop(
                 let _ = respond.send(result);
             }
             AgentCommand::NewSession { request, respond } => {
-                let result = conn.new_session(request).await.map_err(|err| anyhow!(err));
+                log::info!("Agent {} received new_session command with cwd: {:?}", agent_name, request.cwd);
+
+                // Check if child process is still alive
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let error_msg = format!("Agent {} process exited with status: {:?}", agent_name, status);
+                        log::error!("{}", error_msg);
+                        let _ = respond.send(Err(anyhow!(error_msg)));
+                        continue;
+                    }
+                    Ok(None) => {
+                        // Process is still running, continue
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to check agent {} process status: {}", agent_name, e);
+                    }
+                }
+
+                let result = conn.new_session(request).await.map_err(|err| {
+                    log::error!("Agent {} new_session failed: {:?}", agent_name, err);
+                    anyhow!(err)
+                });
+
+                if let Err(ref e) = result {
+                    log::error!("Agent {} new_session error details: {}", agent_name, e);
+                }
+
                 let _ = respond.send(result);
             }
             AgentCommand::ResumeSession { request, respond } => {
@@ -688,11 +714,28 @@ async fn agent_event_loop(
         }
     }
 
+    log::info!("Agent {} command loop ended, cleaning up", agent_name);
+
     drop(conn);
     let _ = io_handle.await;
-    if child.id().is_some() {
-        let _ = child.kill().await;
+
+    // Check if child process is still running
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            log::warn!("Agent {} process already exited with status: {:?}", agent_name, status);
+        }
+        Ok(None) => {
+            // Process is still running, kill it
+            log::info!("Agent {} process still running, killing it", agent_name);
+            if let Err(e) = child.kill().await {
+                log::error!("Failed to kill agent {} process: {}", agent_name, e);
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to check agent {} process status: {}", agent_name, e);
+        }
     }
+
     Ok(())
 }
 

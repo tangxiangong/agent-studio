@@ -1,7 +1,9 @@
 use agent_client_protocol as acp;
 use gpui::*;
-use gpui_component::dock::{
-    DockItem, DockPlacement, Panel, PanelInfo, PanelState, PanelView, TabPanel,
+use gpui_component::{
+    WindowExt, dock::{
+        DockItem, DockPlacement, Panel, PanelInfo, PanelState, PanelView, TabPanel,
+    }, notification::Notification
 };
 use std::sync::Arc;
 
@@ -758,6 +760,16 @@ impl DockWorkspace {
                     Some(ws) => ws,
                     None => {
                         log::error!("Specified workspace not found: {}", ws_id);
+
+                        // Show error notification
+                        _ = window.update(|window, cx| {
+                            struct WorkspaceNotFoundError;
+                            let note = Notification::error(
+                                format!("Workspace not found: {}", ws_id)
+                            ).id::<WorkspaceNotFoundError>();
+                            window.push_notification(note, cx);
+                        });
+
                         return;
                     }
                 }
@@ -767,6 +779,16 @@ impl DockWorkspace {
                     Some(ws) => ws,
                     None => {
                         log::error!("No active workspace available");
+
+                        // Show error notification
+                        _ = window.update(|window, cx| {
+                            struct NoActiveWorkspaceError;
+                            let note = Notification::error(
+                                "No workspace available. Please create or open a workspace first."
+                            ).id::<NoActiveWorkspaceError>();
+                            window.push_notification(note, cx);
+                        });
+
                         return;
                     }
                 }
@@ -813,7 +835,7 @@ impl DockWorkspace {
                 );
 
                 match agent_service
-                    .create_session_with_mcp_and_cwd(&agent_name, mcp_servers, workspace_cwd)
+                    .create_session_with_mcp_and_cwd(&agent_name, mcp_servers, workspace_cwd.clone())
                     .await
                 {
                     Ok(session_id) => {
@@ -825,7 +847,40 @@ impl DockWorkspace {
                         session_id
                     }
                     Err(e) => {
-                        log::error!("Failed to create session: {}", e);
+                        let (error_message, error_details) = if e.to_string().contains("server shut down unexpectedly") {
+                            let details = format!(
+                                "Agent '{}' process crashed during session creation. \
+                                Possible reasons:\n\
+                                1. npx/@zed-industries/claude-code-acp is not installed (run: npm install -g @zed-industries/claude-code-acp)\n\
+                                2. Working directory '{}' does not exist or is not accessible\n\
+                                3. Node.js is not properly installed or configured\n\
+                                4. The agent binary has bugs or incompatibilities\n\n\
+                                Original error: {}",
+                                agent_name,
+                                workspace_cwd.display(),
+                                e
+                            );
+                            (
+                                format!("Failed to create task: Agent '{}' crashed", agent_name),
+                                details
+                            )
+                        } else {
+                            (
+                                format!("Failed to create task: {}", e),
+                                e.to_string()
+                            )
+                        };
+
+                        log::error!("{}", error_details);
+
+                        // Show error notification to user
+                        _ = window.update(|window, cx| {
+                            struct TaskCreationError;
+                            let note = Notification::error(error_message)
+                                .id::<TaskCreationError>();
+                            window.push_notification(note, cx);
+                        });
+
                         return;
                     }
                 }
@@ -853,6 +908,16 @@ impl DockWorkspace {
                 }
                 Err(e) => {
                     log::error!("Failed to create workspace task: {}", e);
+
+                    // Show error notification
+                    _ = window.update(|window, cx| {
+                        struct WorkspaceTaskCreationError;
+                        let note = Notification::error(
+                            format!("Failed to create task: {}", e)
+                        ).id::<WorkspaceTaskCreationError>();
+                        window.push_notification(note, cx);
+                    });
+
                     return;
                 }
             };
@@ -932,6 +997,15 @@ impl DockWorkspace {
                 }
                 Err(e) => {
                     log::error!("Failed to send message: {}", e);
+
+                    // Show error notification
+                    _ = window.update(|window, cx| {
+                        struct MessageSendError;
+                        let note = Notification::error(
+                            format!("Failed to send message: {}", e)
+                        ).id::<MessageSendError>();
+                        window.push_notification(note, cx);
+                    });
                 }
             }
         })

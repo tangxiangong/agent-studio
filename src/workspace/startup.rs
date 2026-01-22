@@ -1,7 +1,7 @@
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, Sizable, Size as UiSize, StyledExt as _,
+    ActiveTheme, Disableable, Icon, IconName, Sizable, Size as UiSize, StyledExt as _,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
@@ -15,6 +15,7 @@ use std::{
 };
 
 use crate::{
+    assets::get_agent_icon,
     AppSettings, AppState,
     core::{
         config::{AgentProcessConfig, Config},
@@ -807,14 +808,7 @@ impl DockWorkspace {
                 let checked = choice.enabled;
 
                 // Agent 图标映射
-                let icon = match name.to_lowercase().as_str() {
-                    "claude" => "🅰️",
-                    "codex" => "⚙️",
-                    "gemini" => "✨",
-                    "iflow" => "📱",
-                    "qwen" => "🔷",
-                    _ => "🤖",
-                };
+                let icon = get_agent_icon(&name);
 
                 list = list.child(
                     h_flex()
@@ -852,8 +846,11 @@ impl DockWorkspace {
                                         .flex()
                                         .items_center()
                                         .justify_center()
-                                        .text_size(px(18.))
-                                        .child(icon),
+                                        .child(
+                                            Icon::new(icon)
+                                                .size(px(18.))
+                                                .text_color(theme.foreground),
+                                        ),
                                 )
                                 .child(
                                     div()

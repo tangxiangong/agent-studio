@@ -232,7 +232,7 @@ impl DockWorkspace {
         let placeholder = if cfg!(target_os = "windows") {
             "C:\\Program Files\\nodejs\\node.exe".to_string()
         } else {
-            "~/.asdf/shims/node 或 /usr/local/bin/node".to_string()
+            "/opt/homebrew/bin/node 或 /usr/local/bin/node".to_string()
         };
 
         let input = cx.new(|cx| {
@@ -304,7 +304,10 @@ impl DockWorkspace {
                                 let path_str = path.display().to_string();
                                 AppSettings::global_mut(cx).nodejs_path = path_str.into();
                                 crate::themes::save_state(cx);
-                                log::info!("Saved detected Node.js path to settings: {}", path.display());
+                                log::info!(
+                                    "Saved detected Node.js path to settings: {}",
+                                    path.display()
+                                );
                             }
 
                             this.startup_state.nodejs_status = NodeJsStatus::Available {
@@ -349,8 +352,7 @@ impl DockWorkspace {
 
         let input_value = input_value.trim().to_string();
         if input_value.is_empty() {
-            self.startup_state.nodejs_custom_path_error =
-                Some("请输入 Node.js 路径".to_string());
+            self.startup_state.nodejs_custom_path_error = Some("请输入 Node.js 路径".to_string());
             cx.notify();
             return;
         }
@@ -390,10 +392,7 @@ impl DockWorkspace {
                             let path_str = path.display().to_string();
                             AppSettings::global_mut(cx).nodejs_path = path_str.into();
                             crate::themes::save_state(cx);
-                            log::info!(
-                                "Saved custom Node.js path to settings: {}",
-                                path.display()
-                            );
+                            log::info!("Saved custom Node.js path to settings: {}", path.display());
                         }
 
                         this.startup_state.nodejs_status = NodeJsStatus::Available {
@@ -997,24 +996,19 @@ impl DockWorkspace {
                     )
                     .when_some(custom_path_input, |this, input| {
                         this.child(
-                            h_flex()
-                                .gap_2()
-                                .child(Input::new(&input).w_full())
-                                .child(
-                                    Button::new("startup-nodejs-validate")
-                                        .label(if is_validating {
-                                            "验证中..."
-                                        } else {
-                                            "验证"
-                                        })
-                                        .outline()
-                                        .disabled(is_validating)
-                                        .on_click(cx.listener(
-                                            |this, _ev, window, cx| {
-                                                this.validate_custom_nodejs_path(window, cx);
-                                            },
-                                        )),
-                                ),
+                            h_flex().gap_2().child(Input::new(&input).w_full()).child(
+                                Button::new("startup-nodejs-validate")
+                                    .label(if is_validating {
+                                        "验证中..."
+                                    } else {
+                                        "验证"
+                                    })
+                                    .outline()
+                                    .disabled(is_validating)
+                                    .on_click(cx.listener(|this, _ev, window, cx| {
+                                        this.validate_custom_nodejs_path(window, cx);
+                                    })),
+                            ),
                         )
                     })
                     .when_some(
@@ -1046,7 +1040,11 @@ impl DockWorkspace {
             )
             .child(
                 Button::new("startup-nodejs-manual")
-                    .label(if show_custom { "收起" } else { "手动设置" })
+                    .label(if show_custom {
+                        "收起"
+                    } else {
+                        "手动设置"
+                    })
                     .ghost()
                     .on_click(cx.listener(|this, _ev, _, cx| {
                         this.startup_state.nodejs_show_custom_input =

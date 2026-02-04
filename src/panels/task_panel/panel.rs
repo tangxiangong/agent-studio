@@ -1053,7 +1053,7 @@ impl TaskPanel {
 
         // Sort tasks by created_at descending (newest first)
         let mut sorted_tasks = workspace.tasks.clone();
-        sorted_tasks.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        sorted_tasks.sort_by_key(|task| std::cmp::Reverse(task.created_at));
 
         v_flex()
             .w_full()
@@ -1392,7 +1392,7 @@ impl TaskPanel {
             .flat_map(|w| w.tasks.clone())
             .collect();
 
-        all_tasks.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        all_tasks.sort_by_key(|task| std::cmp::Reverse(task.created_at));
 
         let now = Local::now().date_naive();
 

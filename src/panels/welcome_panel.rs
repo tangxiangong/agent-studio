@@ -698,7 +698,7 @@ impl WelcomePanel {
 
         // Get all sessions for this agent
         let mut sessions = agent_service.list_workspace_sessions_for_agent(&agent_name);
-        sessions.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        sessions.sort_by_key(|session| std::cmp::Reverse(session.created_at));
 
         // Get the selected session
         if let Some(selected_session) = sessions.get(selected_index) {
@@ -1193,7 +1193,7 @@ impl WelcomePanel {
         };
 
         let mut sessions = agent_service.list_workspace_sessions_for_agent(agent_name);
-        sessions.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        sessions.sort_by_key(|session| std::cmp::Reverse(session.created_at));
 
         if sessions.is_empty() {
             // No sessions for this agent

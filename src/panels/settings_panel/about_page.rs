@@ -37,7 +37,7 @@ pub fn about_page(resettable: bool) -> SettingPage {
                         t!("settings.about.links.github.label").to_string(),
                         SettingField::element(OpenURLSettingField::new(
                             t!("settings.about.links.github.button").to_string(),
-                            "https://github.com/sxhxliang/agent_studio",
+                            "https://github.com/sxhxliang/agent-studio",
                         )),
                     )
                     .description(t!("settings.about.links.github.description").to_string()),
@@ -60,7 +60,7 @@ pub fn about_page(resettable: bool) -> SettingPage {
                                 .label(t!("settings.about.links.website.button").to_string())
                                 .with_size(options.size)
                                 .on_click(|_, _window, cx| {
-                                    cx.open_url("https://github.com/sxhxliang/agent_studio");
+                                    cx.open_url("https://github.com/sxhxliang/agent-studio");
                                 })
                         }),
                     )

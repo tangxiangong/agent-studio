@@ -33,27 +33,36 @@ impl FileItem {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScanState {
+    NotStarted,
+    Scanning,
+    Ready,
+}
+
 /// Delegate for the file picker list
 pub struct FilePickerDelegate {
+    root_path: PathBuf,
     all_items: Vec<FileItem>,
     filtered_items: Vec<FileItem>,
     search_query: String,
     selected_index: Option<usize>,
     on_select: Option<Box<dyn Fn(FileItem) + 'static>>,
     selection_tx: Option<mpsc::UnboundedSender<FileItem>>,
+    scan_state: ScanState,
 }
 
 impl FilePickerDelegate {
     pub fn new(root_path: &Path) -> Self {
-        let all_items = Self::scan_directory(root_path, root_path);
-
         Self {
-            filtered_items: all_items.clone(),
-            all_items,
+            root_path: root_path.to_path_buf(),
+            filtered_items: Vec::new(),
+            all_items: Vec::new(),
             search_query: String::new(),
             selected_index: None,
             on_select: None,
             selection_tx: None,
+            scan_state: ScanState::NotStarted,
         }
     }
 
@@ -74,8 +83,40 @@ impl FilePickerDelegate {
         &self.filtered_items
     }
 
+    pub fn root_path(&self) -> &Path {
+        &self.root_path
+    }
+
+    pub fn needs_scan(&self) -> bool {
+        self.scan_state == ScanState::NotStarted
+    }
+
+    pub fn is_scanning(&self) -> bool {
+        self.scan_state == ScanState::Scanning
+    }
+
+    pub fn mark_scanning(&mut self) {
+        self.scan_state = ScanState::Scanning;
+    }
+
+    pub fn set_items(&mut self, items: Vec<FileItem>) {
+        self.all_items = items;
+        self.scan_state = ScanState::Ready;
+        let query = self.search_query.clone();
+        self.set_search_query(query);
+    }
+
+    pub fn reset_root(&mut self, root_path: PathBuf) {
+        self.root_path = root_path;
+        self.all_items.clear();
+        self.filtered_items.clear();
+        self.search_query.clear();
+        self.selected_index = None;
+        self.scan_state = ScanState::NotStarted;
+    }
+
     /// Scan directory recursively and return all files and folders
-    fn scan_directory(path: &Path, base_path: &Path) -> Vec<FileItem> {
+    pub(crate) fn scan_directory(path: &Path, base_path: &Path) -> Vec<FileItem> {
         let mut items = Vec::new();
 
         // Skip common ignore patterns

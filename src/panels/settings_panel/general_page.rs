@@ -214,7 +214,7 @@ impl SettingsPanel {
                                         .with_size(options.size)
                                         .on_click(|_, _, cx| {
                                             cx.open_url(
-                                                "https://github.com/sxhxliang/agent_studio",
+                                                "https://github.com/sxhxliang/agent-studio",
                                             );
                                         }),
                                 )

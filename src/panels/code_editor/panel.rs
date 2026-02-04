@@ -30,6 +30,7 @@ pub struct CodeEditorPanel {
     indent_guides: bool,
     soft_wrap: bool,
     show_file_tree: bool,
+    files_loaded: bool,
     lsp_store: CodeEditorPanelLspStore,
     current_file_path: Option<PathBuf>,
     has_opened_file: bool,
@@ -51,6 +52,14 @@ impl crate::panels::dock_panel::DockPanel for CodeEditorPanel {
 
     fn description() -> &'static str {
         "A list displays a series of items."
+    }
+
+    fn on_active(&mut self, active: bool, _: &mut Window, cx: &mut App) {
+        if !active || self.files_loaded {
+            return;
+        }
+        self.files_loaded = true;
+        Self::load_files(self.tree_state.clone(), self.working_directory.clone(), cx);
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -105,7 +114,6 @@ impl CodeEditorPanel {
         let tree_state = cx.new(|cx| TreeState::new(cx));
         let working_dir =
             working_dir.unwrap_or_else(|| AppState::global(cx).current_working_dir().clone());
-        Self::load_files(tree_state.clone(), working_dir.clone(), cx);
 
         let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
             this.lint_document(cx);
@@ -120,6 +128,7 @@ impl CodeEditorPanel {
             indent_guides: true,
             soft_wrap: false,
             show_file_tree: true,
+            files_loaded: false,
             lsp_store,
             current_file_path: None,
             has_opened_file: false,
@@ -132,9 +141,14 @@ impl CodeEditorPanel {
     }
 
     fn load_files(state: Entity<TreeState>, path: PathBuf, cx: &mut App) {
+        if !path.is_dir() {
+            return;
+        }
+
         cx.spawn(async move |cx| {
             let ignorer = Ignorer::new(&path.to_string_lossy());
             let items = build_file_items(&ignorer, &path, &path);
+
             _ = state.update(cx, |state, cx| {
                 state.set_items(items, cx);
             });

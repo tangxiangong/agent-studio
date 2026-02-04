@@ -55,6 +55,7 @@ pub struct WelcomePanel {
     code_selections: Vec<AddCodeSelection>,
     selected_files: Vec<String>,
     file_suggestions: Vec<FileItem>,
+    last_file_query: String,
     /// Command suggestions based on input
     command_suggestions: Vec<AvailableCommand>,
     /// Whether to show command suggestions (input starts with /)
@@ -327,6 +328,12 @@ impl WelcomePanel {
                                 "[WelcomePanel] Updated working directory to: {:?}",
                                 this.working_directory
                             );
+                            let new_root = this.working_directory.clone();
+                            this.context_list.update(cx, |state, cx| {
+                                state.delegate_mut().reset_root(new_root);
+                                cx.notify();
+                            });
+                            this.clear_file_suggestions(cx);
                         } else {
                             this.active_workspace_name = None;
                         }
@@ -406,6 +413,7 @@ impl WelcomePanel {
             code_selections: Vec::new(),
             selected_files: Vec::new(),
             file_suggestions: Vec::new(),
+            last_file_query: String::new(),
             command_suggestions: Vec::new(),
             show_command_suggestions: false,
             _subscriptions: Vec::new(),
@@ -964,10 +972,74 @@ impl WelcomePanel {
 
     fn update_file_suggestions(&mut self, query: &str, cx: &mut Context<Self>) {
         let query = query.trim();
+        self.last_file_query = query.to_string();
+
+        let (needs_scan, root_path) = {
+            let delegate = self.context_list.read(cx).delegate();
+            (delegate.needs_scan(), delegate.root_path().to_path_buf())
+        };
+
         self.context_list.update(cx, |state, cx| {
-            state.delegate_mut().set_search_query(query.to_string());
+            let delegate = state.delegate_mut();
+            delegate.set_search_query(query.to_string());
+            if needs_scan && !delegate.is_scanning() {
+                delegate.mark_scanning();
+            }
             cx.notify();
         });
+
+        if needs_scan {
+            let weak_self = cx.entity().downgrade();
+            cx.spawn(async move |_this, cx| {
+                let items = tokio::task::spawn_blocking(move || {
+                    FilePickerDelegate::scan_directory(&root_path, &root_path)
+                })
+                .await
+                .unwrap_or_default();
+
+                _ = cx.update(|cx| {
+                    if let Some(this) = weak_self.upgrade() {
+                        this.update(cx, |this, cx| {
+                            let value = this.input_state.read(cx).value();
+                            let mention_query = value.rfind('@').and_then(|at_index| {
+                                let query = &value[at_index + 1..];
+                                if query.chars().any(char::is_whitespace) {
+                                    None
+                                } else {
+                                    Some(query.to_string())
+                                }
+                            });
+
+                            let Some(query) = mention_query else {
+                                this.clear_file_suggestions(cx);
+                                return;
+                            };
+
+                            this.last_file_query = query.clone();
+                            this.context_list.update(cx, |state, cx| {
+                                state.delegate_mut().set_items(items);
+                                state.delegate_mut().set_search_query(query);
+                                cx.notify();
+                            });
+
+                            let items = this
+                                .context_list
+                                .read(cx)
+                                .delegate()
+                                .filtered_items()
+                                .iter()
+                                .take(MAX_FILE_SUGGESTIONS)
+                                .cloned()
+                                .collect::<Vec<_>>();
+
+                            this.file_suggestions = items;
+                            cx.notify();
+                        });
+                    }
+                });
+            })
+            .detach();
+        }
 
         let items = self
             .context_list

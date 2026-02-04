@@ -79,7 +79,7 @@ pub async fn detect_system_nodejs(mode: NodeJsDetectionMode) -> Option<PathBuf> 
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn unix_standard_node_paths() -> Vec<PathBuf> {
-    let mut paths = vec![
+    let paths = vec![
         PathBuf::from("/usr/local/bin/node"),
         PathBuf::from("/usr/bin/node"),
         PathBuf::from("/opt/homebrew/bin/node"), // macOS Apple Silicon

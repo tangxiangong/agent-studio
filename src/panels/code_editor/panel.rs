@@ -55,11 +55,11 @@ impl crate::panels::dock_panel::DockPanel for CodeEditorPanel {
     }
 
     fn on_active(&mut self, active: bool, _: &mut Window, cx: &mut App) {
-        if !active || self.files_loaded {
+        if !active {
             return;
         }
-        self.files_loaded = true;
-        Self::load_files(self.tree_state.clone(), self.working_directory.clone(), cx);
+
+        self.ensure_file_tree_loaded(cx);
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -145,6 +145,10 @@ impl CodeEditorPanel {
             return;
         }
 
+        if path.parent().is_none() {
+            return;
+        }
+
         cx.spawn(async move |cx| {
             let ignorer = Ignorer::new(&path.to_string_lossy());
             let items = build_file_items(&ignorer, &path, &path);
@@ -154,6 +158,15 @@ impl CodeEditorPanel {
             });
         })
         .detach();
+    }
+
+    fn ensure_file_tree_loaded(&mut self, cx: &mut App) {
+        if self.files_loaded || !crate::themes::startup_completed() {
+            return;
+        }
+
+        self.files_loaded = true;
+        Self::load_files(self.tree_state.clone(), self.working_directory.clone(), cx);
     }
 
     /// Get the workspace_id (if available)
@@ -631,6 +644,8 @@ impl CodeEditorPanel {
 impl Render for CodeEditorPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         use gpui_component::input::RopeExt;
+
+        self.ensure_file_tree_loaded(cx);
 
         // Update diagnostics
         // if self.lsp_store.is_dirty() {

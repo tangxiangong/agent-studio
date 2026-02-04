@@ -65,7 +65,8 @@ pub type CodeSelectionBusContainer = Arc<Mutex<CodeSelectionBus>>;
 /// * `cx` - GPUI App context
 ///
 /// # Example
-/// ```
+/// ```rust,ignore
+/// // Pseudocode; requires a GPUI Entity and App context.
 /// subscribe_entity_to_code_selections(
 ///     &entity,
 ///     bus_container,

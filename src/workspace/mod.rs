@@ -1,9 +1,12 @@
 use anyhow::{Context as _, Result};
 use gpui::*;
 use gpui_component::Root;
-use gpui_component::dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement};
+use gpui_component::dock::{DockArea, DockAreaState, DockEvent, DockItem, DockPlacement, PanelState};
 use smol::Timer;
 use std::{sync::Arc, time::Duration};
+
+/// Panels that should be excluded from loading and saving
+const EXCLUDED_PANELS: &[&str] = &["CodeEditorPanel", "ToolCallDetailPanel"];
 
 use crate::{
     AppSettings, AppTitleBar, CodeEditorPanel, ConversationPanel, SessionManagerPanel, TaskPanel,

@@ -109,13 +109,18 @@ impl AppState {
             }
         }
 
+        let data_dir = crate::core::config_manager::user_data_dir_or_temp();
+        if Self::is_safe_working_dir(&data_dir) {
+            return data_dir;
+        }
+
         if let Some(home) = dirs::home_dir() {
             if Self::is_safe_working_dir(&home) {
                 return home;
             }
         }
 
-        crate::core::config_manager::user_data_dir_or_temp()
+        data_dir
     }
 
     fn is_safe_working_dir(path: &Path) -> bool {

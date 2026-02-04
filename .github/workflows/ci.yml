@@ -39,9 +39,12 @@ jobs:
             pkg-config
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt, clippy
+
+      - name: Verify rustfmt
+        run: rustup component add rustfmt --toolchain nightly
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -63,7 +66,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -82,7 +85,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -119,7 +122,7 @@ jobs:
             pkg-config
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2

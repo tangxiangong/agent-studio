@@ -346,12 +346,7 @@ pub async fn verify_nodejs_executable(path: &Path) -> Result<String> {
     }
 
     // Run 'node --version' to verify it's actually Node.js
-    match tokio::time::timeout(
-        COMMAND_TIMEOUT,
-        new_command(path).arg("--version").output(),
-    )
-    .await
-    {
+    match tokio::time::timeout(COMMAND_TIMEOUT, new_command(path).arg("--version").output()).await {
         Ok(Ok(output)) if output.status.success() => {
             let version = String::from_utf8_lossy(&output.stdout);
             let version = version.trim().to_string();

@@ -8,13 +8,18 @@ use super::{NodeJsDetectionMode, error};
 
 /// Create a Command with console window hidden on Windows
 fn new_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
-    let mut cmd = Command::new(program);
+    let cmd = Command::new(program);
+
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut cmd = cmd;
         cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd
     }
+
+    #[cfg(not(windows))]
     cmd
 }
 

@@ -636,8 +636,6 @@ impl Render for CodeEditorPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         use gpui_component::input::RopeExt;
 
-        self.ensure_file_tree_loaded(cx);
-
         // Update diagnostics
         // if self.lsp_store.is_dirty() {
         //     let diagnostics = self.lsp_store.diagnostics();

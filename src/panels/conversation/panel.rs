@@ -19,8 +19,7 @@ use crate::assets::get_agent_icon;
 use crate::{
     AcpMessageStream, AcpMessageStreamOptions, AppState, ChatInputBox, DiffSummaryOptions,
     PanelAction, PermissionRequestOptions, SendMessageToSession, ToolCallItemOptions,
-    app::actions::AddCodeSelection, core::services::SessionStatus,
-    panels::dock_panel::DockPanel,
+    app::actions::AddCodeSelection, core::services::SessionStatus, panels::dock_panel::DockPanel,
 };
 
 /// Session status information for display
@@ -161,13 +160,15 @@ impl ConversationPanel {
                 window.dispatch_action(Box::new(action), cx);
             }));
         let diff_summary_options = DiffSummaryOptions {
-            on_open_tool_call: Some(Arc::new(|tool_call: ToolCall, window: &mut Window, cx: &mut App| {
-                let action = PanelAction::show_tool_call_detail(
-                    tool_call.tool_call_id.to_string(),
-                    tool_call,
-                );
-                window.dispatch_action(Box::new(action), cx);
-            })),
+            on_open_tool_call: Some(Arc::new(
+                |tool_call: ToolCall, window: &mut Window, cx: &mut App| {
+                    let action = PanelAction::show_tool_call_detail(
+                        tool_call.tool_call_id.to_string(),
+                        tool_call,
+                    );
+                    window.dispatch_action(Box::new(action), cx);
+                },
+            )),
         };
 
         let options = AcpMessageStreamOptions {
@@ -763,6 +764,22 @@ impl ConversationPanel {
         .detach();
     }
 
+    /// Check if the input should be disabled based on session status
+    /// Returns true if the session is closed, failed, or not resumable
+    fn is_input_disabled(&self) -> bool {
+        match &self.session_status {
+            Some(status_info) => {
+                matches!(
+                    status_info.status,
+                    SessionStatus::Closed | SessionStatus::Failed
+                )
+            }
+            // If no session_id, allow input (new conversation mode)
+            // If session_id exists but no status yet, allow input (status will be updated)
+            None => false,
+        }
+    }
+
     /// Render the loading skeleton and status info when session is in progress
     fn render_loading_skeleton(&self, cx: &mut Context<Self>) -> impl IntoElement {
         // Only show loading skeleton when session is actively processing
@@ -1000,12 +1017,14 @@ impl Render for ConversationPanel {
                     // .border_color(cx.theme().border)
                     .child({
                         let entity = cx.entity().clone();
+                        let is_disabled = self.is_input_disabled();
                         ChatInputBox::new("chat-input", self.input_state.clone())
                             .pasted_images(self.pasted_images.clone())
                             .code_selections(self.code_selections.clone())
                             .session_status(
                                 self.session_status.as_ref().map(|info| info.status.clone()),
                             )
+                            .disabled(is_disabled)
                             .on_paste(move |window, cx| {
                                 entity.update(cx, |this, cx| {
                                     this.handle_paste(window, cx);

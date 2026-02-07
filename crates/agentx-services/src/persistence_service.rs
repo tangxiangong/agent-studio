@@ -400,7 +400,10 @@ impl PersistenceService {
                     // Don't accumulate user message chunks - each chunk is a distinct content
                     // block (code selection, text, image) that must be preserved separately
                     // for proper UI rendering (e.g., code selection chips).
-                    log::debug!("Writing UserMessageChunk directly for session: {}", session_id);
+                    log::debug!(
+                        "Writing UserMessageChunk directly for session: {}",
+                        session_id
+                    );
                     let flushed = accumulator.flush();
                     Some(FlushData::Both(Box::new((
                         flushed,

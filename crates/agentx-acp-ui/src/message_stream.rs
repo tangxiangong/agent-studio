@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use agent_client_protocol::{
     ContentBlock, ContentChunk, Plan, PlanEntryStatus, SessionUpdate, ToolCall, ToolCallUpdate,
 };
-use gpui::{App, Context, Entity, IntoElement, ParentElement, Render, Styled, Window, div, prelude::*};
+use gpui::{
+    App, Context, Entity, IntoElement, ParentElement, Render, Styled, Window, div, prelude::*,
+};
 use gpui_component::{ActiveTheme, v_flex};
 
 use crate::agent_thought::AgentThoughtItem;
@@ -102,14 +104,12 @@ impl AcpMessageStream {
         request: Entity<PermissionRequestView>,
         cx: &mut Context<Self>,
     ) {
-        self.items
-            .push(RenderedItem::PermissionRequest(request));
+        self.items.push(RenderedItem::PermissionRequest(request));
         cx.notify();
     }
 
     pub fn add_info_update(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
-        self.items
-            .push(RenderedItem::InfoUpdate(text.into()));
+        self.items.push(RenderedItem::InfoUpdate(text.into()));
         cx.notify();
     }
 
@@ -231,7 +231,11 @@ impl RenderedItem {
     }
 
     /// Try to append an AgentThoughtChunk to this item (returns true if successful)
-    pub fn try_append_agent_thought_chunk(&mut self, text: String, cx: &mut Context<AcpMessageStream>) -> bool {
+    pub fn try_append_agent_thought_chunk(
+        &mut self,
+        text: String,
+        cx: &mut Context<AcpMessageStream>,
+    ) -> bool {
         if let RenderedItem::AgentThought(entity) = self {
             entity.update(cx, |state, cx| {
                 state.append_text(text, cx);

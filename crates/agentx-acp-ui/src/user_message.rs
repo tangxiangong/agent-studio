@@ -292,7 +292,10 @@ fn parse_code_selection_text(text: &str) -> Option<CodeSelectionChip> {
 
     // Format line range for chip display
     let display_range = if line_range.starts_with("Line ") {
-        line_range.strip_prefix("Line ").unwrap_or(&line_range).to_string()
+        line_range
+            .strip_prefix("Line ")
+            .unwrap_or(&line_range)
+            .to_string()
     } else if line_range.starts_with("Lines ") {
         line_range
             .strip_prefix("Lines ")
@@ -535,37 +538,33 @@ impl Render for UserMessageView {
                     }))
                     // Render code selection chips
                     .when(has_chips, |this| {
-                        this.child(
-                            h_flex()
-                                .gap_1p5()
-                                .items_center()
-                                .flex_wrap()
-                                .children(code_chips.into_iter().map(|chip| {
-                                    let display_text =
-                                        format!("{}:{}", chip.file_path, chip.line_range);
+                        this.child(h_flex().gap_1p5().items_center().flex_wrap().children(
+                            code_chips.into_iter().map(|chip| {
+                                let display_text =
+                                    format!("{}:{}", chip.file_path, chip.line_range);
 
-                                    h_flex()
-                                        .gap_1()
-                                        .items_center()
-                                        .py_0p5()
-                                        .px_1p5()
-                                        .rounded(px(6.))
-                                        .bg(theme.primary.opacity(0.1))
-                                        .border_1()
-                                        .border_color(theme.primary.opacity(0.3))
-                                        .child(
-                                            Icon::new(IconName::Frame)
-                                                .size(px(13.))
-                                                .text_color(theme.primary),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_size(px(11.5))
-                                                .text_color(theme.foreground.opacity(0.85))
-                                                .child(display_text),
-                                        )
-                                })),
-                        )
+                                h_flex()
+                                    .gap_1()
+                                    .items_center()
+                                    .py_0p5()
+                                    .px_1p5()
+                                    .rounded(px(6.))
+                                    .bg(theme.primary.opacity(0.1))
+                                    .border_1()
+                                    .border_color(theme.primary.opacity(0.3))
+                                    .child(
+                                        Icon::new(IconName::Frame)
+                                            .size(px(13.))
+                                            .text_color(theme.primary),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(11.5))
+                                            .text_color(theme.foreground.opacity(0.85))
+                                            .child(display_text),
+                                    )
+                            }),
+                        ))
                     }),
             )
     }

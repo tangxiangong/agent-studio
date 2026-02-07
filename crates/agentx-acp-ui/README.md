@@ -5,11 +5,13 @@ ACP (Agent Client Protocol) message UI components used by AgentX.
 ## Components
 
 - `AgentMessage`, `AgentMessageView`
+- `AgentThoughtItem`
 - `UserMessage`, `UserMessageView`
 - `AgentTodoList`, `AgentTodoListView`
 - `ToolCallItem`, `ToolCallItemView`
 - `DiffView`, `DiffSummary`
 - `PermissionRequest`, `PermissionRequestView`
+- `AcpMessageStream`
 
 ## Usage
 
@@ -24,6 +26,14 @@ use gpui_component::Icon;
 let icon_provider = Arc::new(|name: &str| Icon::new(get_agent_icon(name)));
 let data = AgentMessageData::new("session-1").add_text("Hello");
 let view = AgentMessage::new("agent-message", data).icon_provider(icon_provider);
+```
+
+### Message Stream
+
+```rust
+use agentx_acp_ui::{AcpMessageStream, AcpMessageStreamOptions};
+
+let stream = AcpMessageStream::with_options(AcpMessageStreamOptions::default());
 ```
 
 ### Tool Call Item

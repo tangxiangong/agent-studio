@@ -104,6 +104,8 @@ pub struct ChatInputBox {
     selected_mcps: Vec<String>,
     /// Callback when MCP checkbox is clicked (passes (name, checked) tuple)
     on_mcp_toggle: Option<Rc<dyn Fn(&(String, bool), &mut Window, &mut App) + 'static>>,
+    /// Whether the input is disabled (e.g., for closed/failed sessions)
+    disabled: bool,
 }
 
 impl ChatInputBox {
@@ -135,6 +137,7 @@ impl ChatInputBox {
             available_mcps: Vec::new(),
             selected_mcps: Vec::new(),
             on_mcp_toggle: None,
+            disabled: false,
         }
     }
 
@@ -302,6 +305,12 @@ impl ChatInputBox {
         self.on_mcp_toggle = Some(Rc::new(callback));
         self
     }
+
+    /// Set whether the input is disabled (e.g., for closed/failed sessions)
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
 }
 
 impl RenderOnce for ChatInputBox {
@@ -311,6 +320,7 @@ impl RenderOnce for ChatInputBox {
         let on_paste_callback = self.on_paste.clone();
         let input_state_for_paste = self.input_state.clone();
         let input_state = self.input_state.clone();
+        let disabled = self.disabled;
         let suggestion_state_id =
             ElementId::NamedChild(Arc::new(self.id.clone()), "command-suggestions".into());
         let suggestion_state = window.use_keyed_state(suggestion_state_id, cx, |window, cx| {
@@ -538,11 +548,13 @@ impl RenderOnce for ChatInputBox {
                                     "command-suggestion-input".into(),
                                 ))
                                 .items(suggestions)
-                                .enabled(show_files || show_commands)
+                                .enabled((show_files || show_commands) && !disabled)
                                 .when_some(suggestion_header, |input, header| input.header(header))
                                 .max_height(px(200.))
                                 .apply_on_confirm(apply_on_confirm)
-                                .input(|state| Input::new(state).appearance(false))
+                                .input(move |state| {
+                                    Input::new(state).appearance(false).disabled(disabled)
+                                })
                                 .render_item(|item, _selected, _window, cx| {
                                     let theme = cx.theme();
                                     match item {
@@ -767,14 +779,17 @@ impl RenderOnce for ChatInputBox {
                                     _ => (Icon::new(IconName::ArrowUp), false),
                                 };
 
+                                // Button is disabled if: input disabled OR (empty and not in progress)
+                                let btn_disabled = disabled || (is_empty && !is_in_progress);
+
                                 let mut btn = Button::new("send-or-cancel")
                                     .icon(icon)
                                     .rounded_full()
                                     .small()
-                                    .disabled(is_empty && !is_in_progress);
+                                    .disabled(btn_disabled);
 
                                 // Apply appropriate color scheme
-                                btn = if is_empty && !is_in_progress {
+                                btn = if btn_disabled {
                                     // Disabled: muted appearance
                                     btn.custom(
                                         ButtonCustomVariant::new(cx)

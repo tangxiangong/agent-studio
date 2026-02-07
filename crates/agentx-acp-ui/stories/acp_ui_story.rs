@@ -7,9 +7,9 @@ use agent_client_protocol::{
 };
 use agentx_acp_ui::{
     AcpMessageStream, AcpMessageStreamOptions, AgentMessageData, AgentMessageOptions,
-    AgentMessageView, AgentTodoListView, DiffSummary, DiffSummaryData, DiffSummaryOptions, DiffView,
-    PermissionRequest, PermissionRequestOptions, ToolCallItem, ToolCallItemOptions, UserMessageData,
-    UserMessageView,
+    AgentMessageView, AgentTodoListView, DiffSummary, DiffSummaryData, DiffSummaryOptions,
+    DiffView, PermissionRequest, PermissionRequestOptions, ToolCallItem, ToolCallItemOptions,
+    UserMessageData, UserMessageView,
 };
 use gpui::{
     App, AppContext, Context, Entity, IntoElement, ParentElement, Render, RenderOnce, SharedString,
@@ -169,7 +169,8 @@ impl AcpUiStory {
             )
         });
 
-        let message_stream = cx.new(|_| AcpMessageStream::with_options(AcpMessageStreamOptions::default()));
+        let message_stream =
+            cx.new(|_| AcpMessageStream::with_options(AcpMessageStreamOptions::default()));
         message_stream.update(cx, |stream, cx| {
             stream.process_update(
                 SessionUpdate::UserMessageChunk(ContentChunk::new(ContentBlock::from(

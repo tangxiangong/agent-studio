@@ -9,15 +9,18 @@ use gpui_component::{
 };
 
 // Use the published ACP schema crate
-use agent_client_protocol::{ContentChunk, ImageContent, PlanEntryStatus, SessionUpdate, ToolCall};
+use agent_client_protocol::{
+    ContentChunk, ImageContent, PlanEntryStatus, RequestPermissionResponse, SessionUpdate, ToolCall,
+};
 use chrono::{DateTime, Utc};
 use rust_i18n::t;
 use smol::Timer;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use crate::components::ToolCallItem;
+use crate::assets::get_agent_icon;
 use crate::{
     AgentMessage, AgentTodoList, AppState, ChatInputBox, DiffSummary, DiffSummaryData,
+    DiffSummaryOptions, DiffSummaryToolCallHandler, PanelAction, PermissionRequestOptions,
     SendMessageToSession, app::actions::AddCodeSelection, core::services::SessionStatus,
     panels::dock_panel::DockPanel,
 };
@@ -418,16 +421,50 @@ impl ConversationPanel {
                                 event.permission_id
                             );
                             // Create PermissionRequestView entity using cx.new
+                            let permission_store = AppState::global(cx).permission_store().cloned();
+                            let response_handler: Option<crate::PermissionResponseHandler> =
+                                permission_store.clone().map(|store| {
+                                    let handler: crate::PermissionResponseHandler = Arc::new(
+                                        move |permission_id: String,
+                                              response: RequestPermissionResponse,
+                                              cx: &mut Context<crate::PermissionRequest>| {
+                                            let store = store.clone();
+                                            cx.spawn(async move |_entity, _cx| {
+                                                if let Err(e) =
+                                                    store.respond(&permission_id, response).await
+                                                {
+                                                    log::error!(
+                                                        "Failed to send permission response: {}",
+                                                        e
+                                                    );
+                                                } else {
+                                                    log::info!(
+                                                        "Permission response sent successfully"
+                                                    );
+                                                }
+                                            })
+                                            .detach();
+                                        },
+                                    );
+                                    handler
+                                });
+                            if permission_store.is_none() {
+                                log::error!("PermissionStore not available in AppState");
+                            }
+
                             let permission_view = cx.new(|cx| {
                                 let inner = cx.new(|_| {
-                                    crate::PermissionRequest::new(
+                                    crate::PermissionRequest::with_options(
                                         event.permission_id.clone(),
                                         event.session_id.clone(),
                                         &event.tool_call,
                                         event.options.clone(),
+                                        PermissionRequestOptions {
+                                            on_response: response_handler,
+                                        },
                                     )
                                 });
-                                crate::PermissionRequestView { item: inner }
+                                crate::PermissionRequestView::from_entity(inner)
                             });
                             this.rendered_items
                                 .push(RenderedItem::PermissionRequest(permission_view));
@@ -614,7 +651,20 @@ impl ConversationPanel {
                 "Adding DiffSummary to message stream with {} files changed",
                 summary_data.total_files()
             );
-            let diff_summary = cx.new(|_| DiffSummary::new(summary_data));
+            let diff_summary = cx.new(|_| {
+                let handler: crate::DiffSummaryToolCallHandler =
+                    Arc::new(|tool_call: ToolCall, window: &mut Window, cx: &mut App| {
+                        let action = PanelAction::show_tool_call_detail(
+                            tool_call.tool_call_id.to_string(),
+                            tool_call,
+                        );
+                        window.dispatch_action(Box::new(action), cx);
+                    });
+
+                DiffSummary::new(summary_data).with_options(DiffSummaryOptions {
+                    on_open_tool_call: Some(handler),
+                })
+            });
             self.rendered_items
                 .push(RenderedItem::DiffSummary(diff_summary));
         }
@@ -929,7 +979,9 @@ impl Render for ConversationPanel {
                     children = children.child(entity.clone());
                 }
                 RenderedItem::AgentMessage(id, data) => {
-                    let msg = AgentMessage::new(get_element_id(id), data.clone());
+                    let icon_provider = Arc::new(|name: &str| Icon::new(get_agent_icon(name)));
+                    let msg = AgentMessage::new(get_element_id(id), data.clone())
+                        .icon_provider(icon_provider);
                     children = children.child(msg);
                 }
                 RenderedItem::AgentThought(entity) => {

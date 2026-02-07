@@ -15,9 +15,6 @@ pub use app::key_binding;
 pub use assets::Assets;
 pub use assets::get_default_config;
 
-#[cfg(test)]
-mod test_mock_data;
-
 // Re-export from panels module
 use crate::panels::{DockPanelContainer, DockPanelState};
 pub use panels::{
@@ -59,10 +56,12 @@ pub use title_bar::AppTitleBar;
 
 // Export components
 pub use components::{
-    AgentMessage, AgentMessageData, AgentMessageMeta, AgentMessageView, AgentTodoList,
-    AgentTodoListView, ChatInputBox, DiffSummary, DiffSummaryData, FileChangeStats,
-    PermissionRequest, PermissionRequestView, PlanMeta, StatusIndicator, ToolCallItem,
-    ToolCallItemView, UserMessage, UserMessageData, UserMessageView,
+    AgentMessage, AgentMessageData, AgentMessageMeta, AgentMessageOptions, AgentMessageView,
+    AgentTodoList, AgentTodoListView, ChatInputBox, DiffSummary, DiffSummaryData,
+    DiffSummaryOptions, DiffSummaryToolCallHandler, FileChangeStats, PermissionRequest,
+    PermissionRequestOptions, PermissionRequestView, PermissionResponseHandler, PlanMeta,
+    StatusIndicator, ToolCallItem, ToolCallItemOptions, ToolCallItemView, UserMessage,
+    UserMessageData, UserMessageView,
 };
 
 // Re-export ACP types for convenience

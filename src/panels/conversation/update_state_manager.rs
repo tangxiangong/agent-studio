@@ -4,14 +4,14 @@ use gpui::{App, AppContext, Context, Entity};
 ///
 /// This module provides fast O(1) lookups for ToolCall and message updates
 /// using HashMap indices, avoiding expensive O(n) linear searches.
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use super::components::{AgentThoughtItemState, ResourceItemState, UserMessageView};
 use super::helpers::{extract_text_from_content, session_update_type_name};
 use super::rendered_item::{RenderedItem, create_agent_message_data};
 use super::types::ResourceInfo;
-use crate::components::ToolCallItem;
-use crate::{AppState, UserMessageData};
+use crate::components::{ToolCallItem, ToolCallItemOptions};
+use crate::{AppState, PanelAction, UserMessageData};
 
 /// Fast index for locating items in the rendered list
 #[derive(Default)]
@@ -315,7 +315,16 @@ impl<'a, T> UpdateProcessor<'a, T> {
 
         log::debug!("  └─ Creating new ToolCall: {}", tool_call.tool_call_id);
         let tool_call_id = tool_call.tool_call_id.to_string();
-        let entity = cx.new(|_| ToolCallItem::new(tool_call));
+        let options = ToolCallItemOptions::default()
+            .preview_max_lines(AppState::global(cx).tool_call_preview_max_lines())
+            .on_open_detail(Arc::new(|tool_call, window, cx| {
+                let action = PanelAction::show_tool_call_detail(
+                    tool_call.tool_call_id.to_string(),
+                    tool_call,
+                );
+                window.dispatch_action(Box::new(action), cx);
+            }));
+        let entity = cx.new(|_| ToolCallItem::with_options(tool_call, options));
         let new_index = self.items.len();
         self.items.push(RenderedItem::ToolCall(entity));
         self.index.register_tool_call(tool_call_id, new_index);
@@ -355,7 +364,16 @@ impl<'a, T> UpdateProcessor<'a, T> {
             Ok(tool_call) => {
                 log::debug!("     ✓ Successfully created ToolCall from update");
                 let tool_call_id = tool_call.tool_call_id.to_string();
-                let entity = cx.new(|_| ToolCallItem::new(tool_call));
+                let options = ToolCallItemOptions::default()
+                    .preview_max_lines(AppState::global(cx).tool_call_preview_max_lines())
+                    .on_open_detail(Arc::new(|tool_call, window, cx| {
+                        let action = PanelAction::show_tool_call_detail(
+                            tool_call.tool_call_id.to_string(),
+                            tool_call,
+                        );
+                        window.dispatch_action(Box::new(action), cx);
+                    }));
+                let entity = cx.new(|_| ToolCallItem::with_options(tool_call, options));
                 let new_index = self.items.len();
                 self.items.push(RenderedItem::ToolCall(entity));
                 self.index.register_tool_call(tool_call_id, new_index);

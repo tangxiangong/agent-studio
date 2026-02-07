@@ -276,8 +276,8 @@ impl PermissionRequestView {
         })
     }
 
-    /// Create view directly from a PermissionRequest entity (for internal use)
-    pub(crate) fn from_entity(item: Entity<PermissionRequest>) -> Self {
+    /// Create view directly from a PermissionRequest entity
+    pub fn from_entity(item: Entity<PermissionRequest>) -> Self {
         Self { item }
     }
 

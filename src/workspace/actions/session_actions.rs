@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::{
     AppState, ConversationPanel, CreateTaskFromWelcome, NewSessionConversationPanel,
     SendMessageToSession,
-    app::actions::CancelSession,
+    app::actions::{AddCodeSelection, CancelSession},
     panels::{DockPanel, dock_panel::DockPanelContainer},
 };
 
@@ -40,13 +40,15 @@ impl DockWorkspace {
         let task_input = action.task_input.clone();
         let mode = action.mode.clone();
         let images = action.images.clone();
+        let code_selections = action.code_selections.clone();
 
         log::info!(
-            "Creating task from welcome: agent={}, mode={}, input={}, images={}",
+            "Creating task from welcome: agent={}, mode={}, input={}, images={}, code_selections={}",
             agent_name,
             mode,
             task_input,
-            images.len()
+            images.len(),
+            code_selections.len()
         );
 
         let welcome_session = AppState::global(cx).welcome_session().cloned();
@@ -290,6 +292,11 @@ impl DockWorkspace {
 
             // Step 5: Build content blocks and send message
             let mut prompt_blocks: Vec<acp::ContentBlock> = Vec::new();
+            // Add code selections as text context before the user message
+            for selection in code_selections.iter() {
+                let code_context = format_code_selection_as_context(selection);
+                prompt_blocks.push(code_context.into());
+            }
             prompt_blocks.push(task_input.into());
             for (image_content, _filename) in images.iter() {
                 prompt_blocks.push(acp::ContentBlock::Image(image_content.clone()));
@@ -364,6 +371,7 @@ impl DockWorkspace {
         let session_id = action.session_id.clone();
         let message = action.message.clone();
         let images = action.images.clone();
+        let code_selections = action.code_selections.clone();
 
         log::info!("Sending message to session: {}", session_id);
 
@@ -391,6 +399,11 @@ impl DockWorkspace {
             };
 
             let mut prompt_blocks: Vec<acp::ContentBlock> = Vec::new();
+            // Add code selections as text context before the user message
+            for selection in code_selections.iter() {
+                let code_context = format_code_selection_as_context(selection);
+                prompt_blocks.push(code_context.into());
+            }
             prompt_blocks.push(message.clone().into());
             for (image_content, _filename) in images.iter() {
                 prompt_blocks.push(acp::ContentBlock::Image(image_content.clone()));
@@ -463,4 +476,21 @@ impl DockWorkspace {
         })
         .detach();
     }
+}
+
+/// Format a code selection as text context for the ACP prompt.
+///
+/// Produces a markdown-style code block with file path and line range metadata,
+/// suitable for inclusion as a `ContentBlock::Text` in the prompt.
+fn format_code_selection_as_context(selection: &AddCodeSelection) -> String {
+    let line_range = if selection.start_line == selection.end_line {
+        format!("Line {}", selection.start_line)
+    } else {
+        format!("Lines {}-{}", selection.start_line, selection.end_line)
+    };
+
+    format!(
+        "```\n// File: {} ({})\n{}\n```",
+        selection.file_path, line_range, selection.content
+    )
 }

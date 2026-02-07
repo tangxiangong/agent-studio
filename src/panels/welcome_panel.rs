@@ -1442,12 +1442,14 @@ impl WelcomePanel {
 
             // Dispatch CreateTaskFromWelcome action with images and workspace_id
             let images = std::mem::take(&mut self.pasted_images);
+            let code_selections = std::mem::take(&mut self.code_selections);
             let workspace_id = self.workspace_id.clone();
             let action = CreateTaskFromWelcome {
                 task_input: task_name,
                 agent_name,
                 mode,
                 images,
+                code_selections,
                 workspace_id,
             };
 
@@ -1457,9 +1459,6 @@ impl WelcomePanel {
             );
 
             window.dispatch_action(Box::new(action), cx);
-
-            // Clear pasted images and code selections after dispatching action
-            self.code_selections.clear();
         }
     }
 }

@@ -397,8 +397,15 @@ impl PersistenceService {
                     accumulator.try_append_agent_thought_chunk(chunk)
                 }
                 SessionUpdate::UserMessageChunk(chunk) => {
-                    log::debug!("Accumulating UserMessageChunk for session: {}", session_id);
-                    accumulator.try_append_user_message_chunk(chunk)
+                    // Don't accumulate user message chunks - each chunk is a distinct content
+                    // block (code selection, text, image) that must be preserved separately
+                    // for proper UI rendering (e.g., code selection chips).
+                    log::debug!("Writing UserMessageChunk directly for session: {}", session_id);
+                    let flushed = accumulator.flush();
+                    Some(FlushData::Both(Box::new((
+                        flushed,
+                        SessionUpdate::UserMessageChunk(chunk),
+                    ))))
                 }
                 SessionUpdate::ToolCallUpdate(update) => {
                     log::debug!(

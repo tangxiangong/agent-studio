@@ -22,6 +22,8 @@ pub struct UpdateStateIndex {
     last_message_index: Option<usize>,
     /// Track the index of the last thought item (for fast appending)
     last_thought_index: Option<usize>,
+    /// Track the index of the last user message (for merging consecutive chunks)
+    last_user_message_index: Option<usize>,
 }
 
 impl UpdateStateIndex {
@@ -76,11 +78,27 @@ impl UpdateStateIndex {
         self.last_thought_index = None;
     }
 
+    /// Set the index of the last user message (for merging consecutive chunks)
+    pub fn set_last_user_message(&mut self, index: usize) {
+        self.last_user_message_index = Some(index);
+    }
+
+    /// Get the index of the last user message
+    pub fn last_user_message(&self) -> Option<usize> {
+        self.last_user_message_index
+    }
+
+    /// Clear the user message tracking (called when non-user-message events arrive)
+    pub fn clear_user_message_state(&mut self) {
+        self.last_user_message_index = None;
+    }
+
     /// Rebuild index from rendered items (call after bulk operations)
     pub fn rebuild(&mut self, items: &[RenderedItem], cx: &App) {
         self.tool_call_positions.clear();
         self.last_message_index = None;
         self.last_thought_index = None;
+        self.last_user_message_index = None;
 
         for (idx, item) in items.iter().enumerate() {
             match item {
@@ -189,9 +207,29 @@ impl<'a, T> UpdateProcessor<'a, T> {
         }
     }
 
-    /// Process UserMessageChunk
+    /// Process UserMessageChunk with merging support
+    ///
+    /// Consecutive UserMessageChunks (e.g., code selections + text + images from one prompt)
+    /// are merged into a single UserMessage to avoid rendering as separate messages.
     fn process_user_message_chunk(&mut self, chunk: ContentChunk, cx: &mut Context<T>) {
-        // Mark last message as complete if it was streaming
+        // Fast path: Try to merge with the last user message
+        if let Some(last_idx) = self.index.last_user_message() {
+            if last_idx < self.items.len() {
+                if let Some(last_item) = self.items.get_mut(last_idx) {
+                    if last_item.can_accept_user_message_chunk() {
+                        if last_item.try_append_user_message_chunk(chunk.clone(), cx) {
+                            log::debug!(
+                                "  └─ Merged UserMessageChunk into existing message (fast path)"
+                            );
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Slow path: No user message to merge into, create a new one
+        // Mark last agent message/thought as complete if it was streaming
         if self.index.last_message().is_some() || self.index.last_thought().is_some() {
             self.complete_last_item();
             self.index.clear_streaming_state();
@@ -199,11 +237,15 @@ impl<'a, T> UpdateProcessor<'a, T> {
 
         log::debug!("  └─ Creating UserMessage");
         let item = create_user_message(chunk, self.next_index, cx);
+        let new_index = self.items.len();
         self.items.push(item);
+        self.index.set_last_user_message(new_index);
     }
 
     /// Process AgentMessageChunk with optimized merging
     fn process_agent_message_chunk(&mut self, chunk: ContentChunk, cx: &mut Context<T>) {
+        // Clear user message tracking - agent response separates user messages
+        self.index.clear_user_message_state();
         let resolved_agent_name = self.agent_name.map(str::to_string).or_else(|| {
             self.session_id.and_then(|session_id| {
                 AppState::global(cx)
@@ -255,6 +297,8 @@ impl<'a, T> UpdateProcessor<'a, T> {
 
     /// Process AgentThoughtChunk with optimized merging
     fn process_agent_thought_chunk(&mut self, chunk: ContentChunk, cx: &mut Context<T>) {
+        // Clear user message tracking - agent response separates user messages
+        self.index.clear_user_message_state();
         let text = extract_text_from_content(&chunk.content);
 
         // Fast path: Try to merge with tracked last thought
@@ -288,6 +332,8 @@ impl<'a, T> UpdateProcessor<'a, T> {
 
     /// Process ToolCall with O(1) lookup
     fn process_tool_call(&mut self, tool_call: ToolCall, cx: &mut Context<T>) {
+        // Clear user message tracking
+        self.index.clear_user_message_state();
         // Fast O(1) lookup using index
         if let Some(idx) = self
             .index
@@ -386,6 +432,7 @@ impl<'a, T> UpdateProcessor<'a, T> {
 
     /// Process Plan
     fn process_plan(&mut self, plan: Plan) {
+        self.index.clear_user_message_state();
         self.complete_last_item();
         self.index.clear_streaming_state();
         log::debug!("  └─ Creating Plan with {} entries", plan.entries.len());

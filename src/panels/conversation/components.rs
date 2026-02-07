@@ -130,6 +130,66 @@ impl Render for ResourceItemState {
 }
 
 // ============================================================================
+// Code Selection Detection
+// ============================================================================
+
+/// Parsed code selection info from a formatted text block
+struct CodeSelectionChip {
+    file_path: String,
+    line_range: String,
+}
+
+/// Try to parse a text block as a code selection.
+///
+/// Code selection text blocks follow the format produced by
+/// `format_code_selection_as_context()` in session_actions.rs.
+fn parse_code_selection_text(text: &str) -> Option<CodeSelectionChip> {
+    let trimmed = text.trim();
+    if !trimmed.starts_with("```\n// File: ") || !trimmed.ends_with("\n```") {
+        return None;
+    }
+
+    // Extract the "// File: path (Line range)" line
+    let first_line = trimmed
+        .strip_prefix("```\n")?
+        .lines()
+        .next()?;
+
+    // Parse: "// File: /path/to/file.rs (Lines 10-20)" or "// File: /path/to/file.rs (Line 10)"
+    let after_prefix = first_line.strip_prefix("// File: ")?;
+    let paren_pos = after_prefix.rfind('(')?;
+    let file_path = after_prefix[..paren_pos].trim().to_string();
+    let line_range = after_prefix[paren_pos + 1..]
+        .trim_end_matches(')')
+        .trim()
+        .to_string();
+
+    // Extract just the filename for display
+    let filename = std::path::Path::new(&file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&file_path)
+        .to_string();
+
+    // Format line range for chip display
+    let display_range = if line_range.starts_with("Line ") {
+        line_range.strip_prefix("Line ").unwrap_or(&line_range).to_string()
+    } else if line_range.starts_with("Lines ") {
+        line_range
+            .strip_prefix("Lines ")
+            .unwrap_or(&line_range)
+            .replace('-', "~")
+    } else {
+        line_range
+    };
+
+    Some(CodeSelectionChip {
+        file_path: filename,
+        line_range: display_range,
+    })
+}
+
+// ============================================================================
 // Stateful Agent Thought Item
 // ============================================================================
 
@@ -226,10 +286,52 @@ pub struct UserMessageView {
     pub resource_items: Vec<Entity<ResourceItemState>>,
 }
 
+impl UserMessageView {
+    /// Add a content block to this user message (for merging consecutive chunks)
+    pub fn add_content(&mut self, content: ContentBlock, cx: &mut Context<Self>) {
+        // If it's a resource, create a new ResourceItemState entity
+        let is_resource = matches!(
+            content,
+            ContentBlock::ResourceLink(_) | ContentBlock::Resource(_)
+        );
+
+        self.data.update(cx, |d, cx| {
+            d.contents.push(content.clone());
+            cx.notify();
+        });
+
+        if is_resource {
+            if let Some(resource_info) = ResourceInfo::from_content_block(&content) {
+                let item = cx.new(|_| ResourceItemState::new(resource_info));
+                self.resource_items.push(item);
+            }
+        }
+
+        cx.notify();
+    }
+}
+
 impl Render for UserMessageView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let data = self.data.read(cx).clone();
         let mut resource_index = 0;
+        let theme = cx.theme().clone();
+
+        // Separate code selection blocks from other content
+        let mut code_chips: Vec<CodeSelectionChip> = Vec::new();
+        let mut other_contents: Vec<ContentBlock> = Vec::new();
+
+        for content in data.contents.into_iter() {
+            if let ContentBlock::Text(ref text_content) = content {
+                if let Some(chip) = parse_code_selection_text(&text_content.text) {
+                    code_chips.push(chip);
+                    continue;
+                }
+            }
+            other_contents.push(content);
+        }
+
+        let has_chips = !code_chips.is_empty();
 
         v_flex()
             .gap_3()
@@ -241,13 +343,13 @@ impl Render for UserMessageView {
                     .child(
                         Icon::new(IconName::User)
                             .size(px(16.))
-                            .text_color(cx.theme().accent),
+                            .text_color(theme.accent),
                     )
                     .child(
                         div()
                             .text_size(px(13.))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(cx.theme().foreground)
+                            .text_color(theme.foreground)
                             .child("You"),
                     ),
             )
@@ -256,12 +358,13 @@ impl Render for UserMessageView {
                     .gap_3()
                     .pl_6()
                     .w_full()
-                    .children(data.contents.into_iter().filter_map(|content| {
+                    // Render text and resource blocks
+                    .children(other_contents.into_iter().filter_map(|content| {
                         match &content {
                             ContentBlock::Text(text_content) => Some(
                                 div()
                                     .text_size(px(14.))
-                                    .text_color(cx.theme().foreground)
+                                    .text_color(theme.foreground)
                                     .line_height(px(22.))
                                     .child(text_content.text.clone())
                                     .into_any_element(),
@@ -282,7 +385,41 @@ impl Render for UserMessageView {
                             }
                             _ => None,
                         }
-                    })),
+                    }))
+                    // Render code selection chips
+                    .when(has_chips, |this| {
+                        this.child(
+                            h_flex()
+                                .gap_1p5()
+                                .items_center()
+                                .flex_wrap()
+                                .children(code_chips.into_iter().map(|chip| {
+                                    let display_text =
+                                        format!("{}:{}", chip.file_path, chip.line_range);
+
+                                    h_flex()
+                                        .gap_1()
+                                        .items_center()
+                                        .py_0p5()
+                                        .px_1p5()
+                                        .rounded(px(6.))
+                                        .bg(theme.primary.opacity(0.1))
+                                        .border_1()
+                                        .border_color(theme.primary.opacity(0.3))
+                                        .child(
+                                            Icon::new(IconName::Frame)
+                                                .size(px(13.))
+                                                .text_color(theme.primary),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(px(11.5))
+                                                .text_color(theme.foreground.opacity(0.85))
+                                                .child(display_text),
+                                        )
+                                })),
+                        )
+                    }),
             )
     }
 }

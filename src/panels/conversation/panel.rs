@@ -711,6 +711,7 @@ impl ConversationPanel {
         &self,
         text: String,
         images: Vec<(ImageContent, String)>,
+        code_selections: Vec<AddCodeSelection>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -730,6 +731,7 @@ impl ConversationPanel {
             session_id: session_id.clone(),
             message: text,
             images,
+            code_selections,
         };
 
         window.dispatch_action(Box::new(action), cx);
@@ -1098,18 +1100,20 @@ impl Render for ConversationPanel {
                             }))
                             .on_send(cx.listener(|this, _ev, window, cx| {
                                 let text = this.input_state.read(cx).value().to_string();
-                                if !text.trim().is_empty() || !this.pasted_images.is_empty() {
+                                if !text.trim().is_empty()
+                                    || !this.pasted_images.is_empty()
+                                    || !this.code_selections.is_empty()
+                                {
                                     // Clear the input
                                     this.input_state.update(cx, |state, cx| {
                                         state.set_value(SharedString::from(""), window, cx);
                                     });
 
-                                    // Send the message with images if any
+                                    // Send the message with images and code selections
                                     let images = std::mem::take(&mut this.pasted_images);
-                                    this.send_message(text, images, window, cx);
+                                    let code_selections = std::mem::take(&mut this.code_selections);
+                                    this.send_message(text, images, code_selections, window, cx);
 
-                                    // Clear pasted images and code selections after sending
-                                    this.code_selections.clear();
                                     cx.notify();
                                 }
                             }))

@@ -64,6 +64,23 @@ impl RenderedItem {
     pub fn can_accept_agent_thought_chunk(&self) -> bool {
         matches!(self, RenderedItem::AgentThought(..))
     }
+
+    /// Check if this item can accept a user message chunk (for merging)
+    pub fn can_accept_user_message_chunk(&self) -> bool {
+        matches!(self, RenderedItem::UserMessage(..))
+    }
+
+    /// Try to append a UserMessageChunk to this item (returns true if successful)
+    pub fn try_append_user_message_chunk(&mut self, chunk: ContentChunk, cx: &mut App) -> bool {
+        if let RenderedItem::UserMessage(entity) = self {
+            entity.update(cx, |view, cx| {
+                view.add_content(chunk.content, cx);
+            });
+            true
+        } else {
+            false
+        }
+    }
 }
 
 // ============================================================================

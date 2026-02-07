@@ -9,26 +9,17 @@ use gpui_component::{
 };
 
 // Use the published ACP schema crate
-use agent_client_protocol::{ContentChunk, ImageContent, PlanEntryStatus, SessionUpdate, ToolCall};
+use agent_client_protocol::{ImageContent, PlanEntryStatus, RequestPermissionResponse, ToolCall};
 use chrono::{DateTime, Utc};
 use rust_i18n::t;
 use smol::Timer;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use crate::components::ToolCallItem;
+use crate::assets::get_agent_icon;
 use crate::{
-    AgentMessage, AgentTodoList, AppState, ChatInputBox, DiffSummary, DiffSummaryData,
-    SendMessageToSession, app::actions::AddCodeSelection, core::services::SessionStatus,
-    panels::dock_panel::DockPanel,
-};
-
-// Import from submodules
-use super::{
-    components::{AgentThoughtItemState, ResourceItemState, UserMessageView},
-    helpers::{extract_text_from_content, get_element_id, session_update_type_name},
-    rendered_item::{RenderedItem, create_agent_message_data},
-    types::ResourceInfo,
-    update_state_manager::{UpdateProcessor, UpdateStateIndex},
+    AcpMessageStream, AcpMessageStreamOptions, AppState, ChatInputBox, DiffSummaryOptions,
+    PanelAction, PermissionRequestOptions, SendMessageToSession, ToolCallItemOptions,
+    app::actions::AddCodeSelection, core::services::SessionStatus, panels::dock_panel::DockPanel,
 };
 
 /// Session status information for display
@@ -43,12 +34,8 @@ pub struct SessionStatusInfo {
 /// Conversation panel that displays SessionUpdate messages from ACP
 pub struct ConversationPanel {
     focus_handle: FocusHandle,
-    /// List of rendered items
-    rendered_items: Vec<RenderedItem>,
-    /// Fast index for O(1) lookups (tool calls, streaming messages)
-    update_index: UpdateStateIndex,
-    /// Counter for generating unique IDs for new items
-    next_index: usize,
+    /// ACP message stream UI
+    message_stream: Entity<AcpMessageStream>,
     /// Optional session ID to filter updates (None = all sessions)
     session_id: Option<String>,
     /// Scroll handle for auto-scrolling to bottom
@@ -69,6 +56,7 @@ pub struct ConversationPanel {
 
 const MESSAGE_SERVICE_RETRY_DELAY_MS: u64 = 500;
 const MESSAGE_SERVICE_MAX_RETRIES: usize = 60;
+const AUTO_SCROLL_THRESHOLD_PX: f32 = 120.0;
 
 impl ConversationPanel {
     /// Create a new panel with mock data (for demo purposes)
@@ -134,15 +122,11 @@ impl ConversationPanel {
         let focus_handle = cx.focus_handle();
         let scroll_handle = ScrollHandle::new();
         let input_state = Self::create_input_state(window, cx);
-        let rendered_items = Vec::new();
-        let update_index = UpdateStateIndex::new();
-        let next_index = rendered_items.len();
+        let message_stream = Self::create_message_stream(cx);
 
         Self {
             focus_handle,
-            rendered_items,
-            update_index,
-            next_index,
+            message_stream,
             session_id,
             scroll_handle,
             input_state,
@@ -162,6 +146,45 @@ impl ConversationPanel {
                 .soft_wrap(true)
                 .placeholder("Type a message...")
         })
+    }
+
+    fn create_message_stream(cx: &mut App) -> Entity<AcpMessageStream> {
+        let icon_provider = Arc::new(|name: &str| Icon::new(get_agent_icon(name)));
+        let tool_call_options = ToolCallItemOptions::default()
+            .preview_max_lines(AppState::global(cx).tool_call_preview_max_lines())
+            .on_open_detail(Arc::new(|tool_call, window, cx| {
+                let action = PanelAction::show_tool_call_detail(
+                    tool_call.tool_call_id.to_string(),
+                    tool_call,
+                );
+                window.dispatch_action(Box::new(action), cx);
+            }));
+        let diff_summary_options = DiffSummaryOptions {
+            on_open_tool_call: Some(Arc::new(
+                |tool_call: ToolCall, window: &mut Window, cx: &mut App| {
+                    let action = PanelAction::show_tool_call_detail(
+                        tool_call.tool_call_id.to_string(),
+                        tool_call,
+                    );
+                    window.dispatch_action(Box::new(action), cx);
+                },
+            )),
+        };
+
+        let options = AcpMessageStreamOptions {
+            agent_icon_provider: icon_provider,
+            tool_call_item_options: tool_call_options,
+            diff_summary_options,
+        };
+
+        cx.new(|_| AcpMessageStream::with_options(options))
+    }
+
+    fn should_auto_scroll(&self) -> bool {
+        let max_offset = self.scroll_handle.max_offset().height;
+        let offset = self.scroll_handle.offset().y;
+        let distance_to_bottom = max_offset + offset;
+        distance_to_bottom <= px(AUTO_SCROLL_THRESHOLD_PX)
     }
 
     /// Load historical messages for a session
@@ -195,34 +218,32 @@ impl ConversationPanel {
                                     .agent_service()
                                     .and_then(|service| service.get_agent_for_session(&session_id));
 
-                                // Use optimized UpdateProcessor for batch loading
                                 for persisted_msg in messages.into_iter() {
                                     log::debug!(
-                                        "Loading historical message {}: timestamp={}",
-                                        this.next_index,
+                                        "Loading historical message: timestamp={}",
                                         persisted_msg.timestamp
                                     );
 
-                                    let mut processor = UpdateProcessor::<ConversationPanel>::new(
-                                        &mut this.rendered_items,
-                                        &mut this.update_index,
-                                        Some(session_id.as_str()),
-                                        agent_name.as_deref(),
-                                        this.next_index,
-                                    );
-
-                                    processor.process_update(persisted_msg.update, cx);
-                                    this.next_index += 1;
+                                    this.message_stream.update(cx, |stream, cx| {
+                                        stream.process_update(
+                                            persisted_msg.update,
+                                            Some(session_id.as_str()),
+                                            agent_name.as_deref(),
+                                            cx,
+                                        );
+                                    });
                                 }
 
+                                let total_items = this.message_stream.read(cx).len();
                                 log::info!(
-                                    "Loaded history for session {}: {} items, next_index={}",
+                                    "Loaded history for session {}: {} items",
                                     session_id,
-                                    this.rendered_items.len(),
-                                    this.next_index
+                                    total_items
                                 );
 
-                                this.add_diff_summary_if_needed(cx);
+                                this.message_stream.update(cx, |stream, cx| {
+                                    stream.add_diff_summary_if_needed(cx);
+                                });
                                 this.scroll_handle.scroll_to_bottom();
                                 cx.notify();
                             });
@@ -305,38 +326,48 @@ impl ConversationPanel {
             );
 
             while let Some(event) = rx.recv().await {
+                let mut events = vec![event];
+                while let Ok(event) = rx.try_recv() {
+                    events.push(event);
+                }
+                let events_len = events.len();
+
                 log::info!(
-                    "Background task received update for session: {}",
+                    "Background task received {} updates for session: {}",
+                    events_len,
                     session_filter_log.as_deref().unwrap_or("all")
                 );
 
-                let session_id = event.session_id.clone();
-                let agent_name = event.agent_name.clone();
-                let update = (*event.update).clone();
-
                 let weak = weak_entity.clone();
-                let _ = cx.update(|cx| {
+                let _ = cx.update(move |cx| {
                     if let Some(entity) = weak.upgrade() {
                         entity.update(cx, |this, cx| {
-                            // Use optimized UpdateProcessor
-                            let mut processor = UpdateProcessor::<ConversationPanel>::new(
-                                &mut this.rendered_items,
-                                &mut this.update_index,
-                                Some(session_id.as_str()),
-                                agent_name.as_deref(),
-                                this.next_index,
-                            );
+                            let should_auto_scroll = this.should_auto_scroll();
 
-                            processor.process_update(update, cx);
-                            this.next_index += 1;
+                            for event in events {
+                                let session_id = event.session_id.clone();
+                                let agent_name = event.agent_name.clone();
+                                let update = (*event.update).clone();
+                                this.message_stream.update(cx, |stream, cx| {
+                                    stream.process_update(
+                                        update,
+                                        Some(session_id.as_str()),
+                                        agent_name.as_deref(),
+                                        cx,
+                                    );
+                                });
+                            }
 
-                            cx.notify(); // Trigger re-render immediately
+                            if should_auto_scroll {
+                                this.scroll_handle.scroll_to_bottom();
+                            }
+                            cx.notify();
 
-                            // Scroll to bottom after render completes
-                            this.scroll_handle.scroll_to_bottom();
+                            let total_items = this.message_stream.read(cx).len();
                             log::info!(
-                                "Rendered session update, total items: {}",
-                                this.rendered_items.len()
+                                "Rendered {} session updates, total items: {}",
+                                events_len,
+                                total_items
                             );
                         });
                     } else {
@@ -365,8 +396,7 @@ impl ConversationPanel {
         cx: &mut App,
     ) {
         let weak_entity = entity.downgrade();
-        let event_hub = AppState::global(cx).event_hub.clone();
-
+        let event_hub = AppState::global(cx).event_hub().clone();
         // Create unbounded channel for cross-thread communication
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<
             crate::core::event_bus::PermissionRequestEvent,
@@ -419,19 +449,54 @@ impl ConversationPanel {
                                 event.permission_id
                             );
                             // Create PermissionRequestView entity using cx.new
+                            let permission_store = AppState::global(cx).permission_store().cloned();
+                            let response_handler: Option<crate::PermissionResponseHandler> =
+                                permission_store.clone().map(|store| {
+                                    let handler: crate::PermissionResponseHandler = Arc::new(
+                                        move |permission_id: String,
+                                              response: RequestPermissionResponse,
+                                              cx: &mut Context<crate::PermissionRequest>| {
+                                            let store = store.clone();
+                                            cx.spawn(async move |_entity, _cx| {
+                                                if let Err(e) =
+                                                    store.respond(&permission_id, response).await
+                                                {
+                                                    log::error!(
+                                                        "Failed to send permission response: {}",
+                                                        e
+                                                    );
+                                                } else {
+                                                    log::info!(
+                                                        "Permission response sent successfully"
+                                                    );
+                                                }
+                                            })
+                                            .detach();
+                                        },
+                                    );
+                                    handler
+                                });
+                            if permission_store.is_none() {
+                                log::error!("PermissionStore not available in AppState");
+                            }
+
                             let permission_view = cx.new(|cx| {
                                 let inner = cx.new(|_| {
-                                    crate::PermissionRequest::new(
+                                    crate::PermissionRequest::with_options(
                                         event.permission_id.clone(),
                                         event.session_id.clone(),
                                         &event.tool_call,
                                         event.options.clone(),
+                                        PermissionRequestOptions {
+                                            on_response: response_handler,
+                                        },
                                     )
                                 });
-                                crate::PermissionRequestView { item: inner }
+                                crate::PermissionRequestView::from_entity(inner)
                             });
-                            this.rendered_items
-                                .push(RenderedItem::PermissionRequest(permission_view));
+                            this.message_stream.update(cx, |stream, cx| {
+                                stream.add_permission_request(permission_view, cx);
+                            });
 
                             cx.notify(); // Trigger re-render immediately
 
@@ -446,7 +511,7 @@ impl ConversationPanel {
 
                             log::info!(
                                 "Rendered permission request, total items: {}",
-                                this.rendered_items.len()
+                                this.message_stream.read(cx).len()
                             );
                         });
                     } else {
@@ -469,10 +534,10 @@ impl ConversationPanel {
     pub fn subscribe_to_code_selections(entity: &Entity<Self>, cx: &mut App) {
         crate::core::event_bus::subscribe_entity_to_code_selections(
             entity,
-            AppState::global(cx).event_hub.clone(),
+            AppState::global(cx).event_hub().clone(),
             "ConversationPanel",
             |panel, selection, cx| {
-                panel.code_selections.push(selection);
+                panel.code_selections.push(selection.into());
                 cx.notify();
             },
             cx,
@@ -486,8 +551,7 @@ impl ConversationPanel {
         cx: &mut App,
     ) {
         let weak_entity = entity.downgrade();
-        let event_hub = AppState::global(cx).event_hub.clone();
-
+        let event_hub = AppState::global(cx).event_hub().clone();
         // Create unbounded channel for cross-thread communication
         let (tx, mut rx) =
             tokio::sync::mpsc::unbounded_channel::<crate::core::event_bus::WorkspaceUpdateEvent>();
@@ -551,13 +615,15 @@ impl ConversationPanel {
 
                                 // Mark last message as complete when session completes or becomes idle
                                 if matches!(status, SessionStatus::Completed | SessionStatus::Idle) {
-                                    if let Some(last_item) = this.rendered_items.last_mut() {
-                                        last_item.mark_complete();
-                                        log::debug!("Marked last message as complete due to status change to {:?}", status);
-                                    }
+                                    this.message_stream.update(cx, |stream, cx| {
+                                        stream.mark_last_complete(cx);
+                                        stream.add_diff_summary_if_needed(cx);
+                                    });
 
-                                    // Add DiffSummary to message stream when session ends
-                                    this.add_diff_summary_if_needed(cx);
+                                    log::debug!(
+                                        "Marked last message as complete due to status change to {:?}",
+                                        status
+                                    );
                                 }
 
                                 // Update session status
@@ -586,40 +652,6 @@ impl ConversationPanel {
             "Subscribed to workspace bus for status updates: {}",
             filter_log3.as_deref().unwrap_or("all sessions")
         );
-    }
-
-    /// Collect all ToolCall instances from rendered items
-    fn collect_tool_calls(&self, cx: &App) -> Vec<ToolCall> {
-        let mut tool_calls = Vec::new();
-
-        for item in &self.rendered_items {
-            if let RenderedItem::ToolCall(entity) = item {
-                let tool_call = entity.read(cx).tool_call().clone();
-                tool_calls.push(tool_call);
-            }
-        }
-
-        tool_calls
-    }
-
-    /// Add DiffSummary to the message stream if there are any tool calls with diffs
-    fn add_diff_summary_if_needed(&mut self, cx: &mut Context<Self>) {
-        // Collect all tool calls
-        let tool_calls = self.collect_tool_calls(cx);
-
-        // Create summary data from tool calls
-        let summary_data = DiffSummaryData::from_tool_calls(&tool_calls);
-
-        // Only add summary if there are actual changes
-        if summary_data.has_changes() {
-            log::info!(
-                "Adding DiffSummary to message stream with {} files changed",
-                summary_data.total_files()
-            );
-            let diff_summary = cx.new(|_| DiffSummary::new(summary_data));
-            self.rendered_items
-                .push(RenderedItem::DiffSummary(diff_summary));
-        }
     }
 
     /// Handle paste event and add images to pasted_images list
@@ -663,6 +695,7 @@ impl ConversationPanel {
         &self,
         text: String,
         images: Vec<(ImageContent, String)>,
+        code_selections: Vec<AddCodeSelection>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -682,6 +715,7 @@ impl ConversationPanel {
             session_id: session_id.clone(),
             message: text,
             images,
+            code_selections,
         };
 
         window.dispatch_action(Box::new(action), cx);
@@ -730,6 +764,22 @@ impl ConversationPanel {
         .detach();
     }
 
+    /// Check if the input should be disabled based on session status
+    /// Returns true if the session is closed, failed, or not resumable
+    fn is_input_disabled(&self) -> bool {
+        match &self.session_status {
+            Some(status_info) => {
+                matches!(
+                    status_info.status,
+                    SessionStatus::Closed | SessionStatus::Failed
+                )
+            }
+            // If no session_id, allow input (new conversation mode)
+            // If session_id exists but no status yet, allow input (status will be updated)
+            None => false,
+        }
+    }
+
     /// Render the loading skeleton and status info when session is in progress
     fn render_loading_skeleton(&self, cx: &mut Context<Self>) -> impl IntoElement {
         // Only show loading skeleton when session is actively processing
@@ -744,17 +794,7 @@ impl ConversationPanel {
             return v_flex().into_any_element();
         }
 
-        // Find the current todo from Plan entries
-        let current_todo = self.rendered_items.iter().rev().find_map(|item| {
-            if let RenderedItem::Plan(plan) = item {
-                plan.entries
-                    .iter()
-                    .find(|entry| entry.status == PlanEntryStatus::InProgress)
-                    .map(|entry| entry.content.clone())
-            } else {
-                None
-            }
-        });
+        let current_todo = self.message_stream.read(cx).current_todo_in_progress();
 
         // Build status indicator row
         let status_info = self.session_status.as_ref().unwrap(); // Safe because of check above
@@ -923,57 +963,13 @@ impl Focusable for ConversationPanel {
 
 impl Render for ConversationPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut children = v_flex().p_4().gap_3().bg(cx.theme().background);
-
-        for item in &self.rendered_items {
-            match item {
-                RenderedItem::UserMessage(entity) => {
-                    children = children.child(entity.clone());
-                }
-                RenderedItem::AgentMessage(id, data) => {
-                    let msg = AgentMessage::new(get_element_id(id), data.clone());
-                    children = children.child(msg);
-                }
-                RenderedItem::AgentThought(entity) => {
-                    children = children.child(entity.clone());
-                }
-                RenderedItem::Plan(plan) => {
-                    let todo_list = AgentTodoList::from_plan(plan.clone());
-                    children = children.child(v_flex().pl_6().child(todo_list));
-                }
-                RenderedItem::ToolCall(entity) => {
-                    children = children.child(v_flex().pl_6().child(entity.clone()));
-                }
-                RenderedItem::PermissionRequest(entity) => {
-                    children = children.child(v_flex().pl_6().child(entity.clone()));
-                }
-                RenderedItem::DiffSummary(entity) => {
-                    // Render DiffSummary as part of message stream
-                    children = children.child(entity.clone());
-                }
-                RenderedItem::InfoUpdate(text) => {
-                    children = children.child(
-                        div().pl_6().child(
-                            div()
-                                .p_2()
-                                .rounded(cx.theme().radius)
-                                .bg(cx.theme().muted.opacity(0.5))
-                                .border_1()
-                                .border_color(cx.theme().border.opacity(0.3))
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(text.clone()),
-                                ),
-                        ),
-                    );
-                }
-            }
-        }
-
-        // Add loading skeleton when session is in progress (conditional rendering handled in function)
-        children = children.child(self.render_loading_skeleton(cx));
+        let is_empty = self.message_stream.read(cx).is_empty();
+        let message_list = v_flex()
+            .p_4()
+            .gap_3()
+            .bg(cx.theme().background)
+            .child(self.message_stream.clone())
+            .child(self.render_loading_skeleton(cx));
 
         // Main layout: vertical flex with scroll area on top and input box at bottom
         v_flex()
@@ -988,7 +984,7 @@ impl Render for ConversationPanel {
                     .track_scroll(&self.scroll_handle)
                     .overflow_y_scroll()
                     .size_full()
-                    .when(self.rendered_items.is_empty(), |this| {
+                    .when(is_empty, |this| {
                         // Show empty state with centered text
                         this.child(
                             div()
@@ -1004,10 +1000,10 @@ impl Render for ConversationPanel {
                                 ),
                         )
                     })
-                    .when(!self.rendered_items.is_empty(), |this| {
+                    .when(!is_empty, |this| {
                         // Show message list
                         this.pb_3() // Add padding at bottom so messages don't get hidden behind input box
-                            .child(children)
+                            .child(message_list)
                     }),
             )
             .child(
@@ -1021,12 +1017,14 @@ impl Render for ConversationPanel {
                     // .border_color(cx.theme().border)
                     .child({
                         let entity = cx.entity().clone();
+                        let is_disabled = self.is_input_disabled();
                         ChatInputBox::new("chat-input", self.input_state.clone())
                             .pasted_images(self.pasted_images.clone())
                             .code_selections(self.code_selections.clone())
                             .session_status(
                                 self.session_status.as_ref().map(|info| info.status.clone()),
                             )
+                            .disabled(is_disabled)
                             .on_paste(move |window, cx| {
                                 entity.update(cx, |this, cx| {
                                     this.handle_paste(window, cx);
@@ -1048,18 +1046,20 @@ impl Render for ConversationPanel {
                             }))
                             .on_send(cx.listener(|this, _ev, window, cx| {
                                 let text = this.input_state.read(cx).value().to_string();
-                                if !text.trim().is_empty() || !this.pasted_images.is_empty() {
+                                if !text.trim().is_empty()
+                                    || !this.pasted_images.is_empty()
+                                    || !this.code_selections.is_empty()
+                                {
                                     // Clear the input
                                     this.input_state.update(cx, |state, cx| {
                                         state.set_value(SharedString::from(""), window, cx);
                                     });
 
-                                    // Send the message with images if any
+                                    // Send the message with images and code selections
                                     let images = std::mem::take(&mut this.pasted_images);
-                                    this.send_message(text, images, window, cx);
+                                    let code_selections = std::mem::take(&mut this.code_selections);
+                                    this.send_message(text, images, code_selections, window, cx);
 
-                                    // Clear pasted images and code selections after sending
-                                    this.code_selections.clear();
                                     cx.notify();
                                 }
                             }))

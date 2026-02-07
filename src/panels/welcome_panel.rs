@@ -174,10 +174,10 @@ impl WelcomePanel {
         // Subscribe to code selection events using the shared helper function
         crate::core::event_bus::subscribe_entity_to_code_selections(
             &entity,
-            AppState::global(cx).event_hub.clone(),
+            AppState::global(cx).event_hub().clone(),
             "WelcomePanel",
             |panel, selection, cx| {
-                panel.code_selections.push(selection);
+                panel.code_selections.push(selection.into());
                 cx.notify();
             },
             cx,
@@ -185,7 +185,7 @@ impl WelcomePanel {
 
         // Subscribe to agent config events for dynamic agent list updates
         {
-            let event_hub = AppState::global(cx).event_hub.clone();
+            let event_hub = AppState::global(cx).event_hub().clone();
             let weak_entity = entity.downgrade();
             let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
@@ -1442,12 +1442,14 @@ impl WelcomePanel {
 
             // Dispatch CreateTaskFromWelcome action with images and workspace_id
             let images = std::mem::take(&mut self.pasted_images);
+            let code_selections = std::mem::take(&mut self.code_selections);
             let workspace_id = self.workspace_id.clone();
             let action = CreateTaskFromWelcome {
                 task_input: task_name,
                 agent_name,
                 mode,
                 images,
+                code_selections,
                 workspace_id,
             };
 
@@ -1457,9 +1459,6 @@ impl WelcomePanel {
             );
 
             window.dispatch_action(Box::new(action), cx);
-
-            // Clear pasted images and code selections after dispatching action
-            self.code_selections.clear();
         }
     }
 }

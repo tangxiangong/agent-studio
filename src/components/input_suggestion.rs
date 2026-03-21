@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::rc::Rc;
 
 use gpui::{
     App, AppContext as _, Bounds, ClickEvent, Context, Corner, ElementId, Entity, EventEmitter,
@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, ElementExt as _, StyledExt as _,
+    ActiveTheme, StyledExt as _,
     input::{Input, InputEvent, InputState},
     list::ListItem,
     scroll::ScrollableElement as _,
@@ -570,14 +570,9 @@ impl<T: InputSuggestionItem + 'static> RenderOnce for InputSuggestion<T> {
             state.set_apply_on_confirm(apply_on_confirm);
         });
 
-        let (items, selected, open, bounds) = {
+        let (items, selected, open) = {
             let state = state.read(cx);
-            (
-                state.items.clone(),
-                state.selected,
-                state.open,
-                state.input_bounds,
-            )
+            (state.items.clone(), state.selected, state.open)
         };
 
         let input = if let Some(builder) = self.input_builder.as_ref() {
@@ -609,7 +604,7 @@ impl<T: InputSuggestionItem + 'static> RenderOnce for InputSuggestion<T> {
                 };
 
                 ListItem::new(ElementId::NamedChild(
-                    Arc::new(self.id.clone()),
+                    Box::new(self.id.clone()),
                     format!("item-{ix}").into(),
                 ))
                 .selected(selected)
@@ -641,66 +636,36 @@ impl<T: InputSuggestionItem + 'static> RenderOnce for InputSuggestion<T> {
         };
 
         let popover = if open {
-            bounds.map(|bounds| {
-                let mut content = v_flex()
-                    .occlude()
-                    .popover_style(cx)
-                    .p_2()
-                    .when_some(self.max_height, |this, height| this.max_h(height))
-                    .child(list)
-                    .refine_style(&self.style);
+            let mut content = v_flex()
+                .occlude()
+                .popover_style(cx)
+                .p_2()
+                .when_some(self.max_height, |this, height| this.max_h(height))
+                .child(list)
+                .refine_style(&self.style);
 
-                content = match self.menu_width {
-                    Length::Auto => content.w(bounds.size.width),
-                    Length::Definite(width) => content.w(width),
-                };
+            content = match self.menu_width {
+                Length::Auto => content.w_full(),
+                Length::Definite(width) => content.w(width),
+            };
 
-                let content = match self.anchor {
-                    Corner::TopLeft | Corner::TopRight => content.top_1(),
-                    Corner::BottomLeft | Corner::BottomRight => content.bottom_1(),
-                };
+            let mouse_button = self.mouse_button;
+            let content = content.on_mouse_up_out(mouse_button, {
+                let state = state.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        state.open = false;
+                        state.emit_open_change(window, cx);
+                        cx.notify();
+                    });
+                }
+            });
 
-                let position = Self::resolved_corner(self.anchor, bounds);
-                let mouse_button = self.mouse_button;
-                let content = content.on_mouse_up_out(mouse_button, {
-                    let state = state.clone();
-                    move |_, window, cx| {
-                        state.update(cx, |state, cx| {
-                            state.open = false;
-                            state.emit_open_change(window, cx);
-                            cx.notify();
-                        });
-                    }
-                });
-
-                deferred(
-                    anchored()
-                        .snap_to_window_with_margin(px(8.))
-                        .anchor(self.anchor)
-                        .position(position)
-                        .child(content),
-                )
-                .with_priority(1)
-                .into_any_element()
-            })
+            Some(content.into_any_element())
         } else {
             None
         };
 
-        div()
-            .id(self.id.clone())
-            .child(
-                div()
-                    .on_prepaint({
-                        let state = state.clone();
-                        move |bounds, _, cx| {
-                            state.update(cx, |state, _| {
-                                state.input_bounds = Some(bounds);
-                            });
-                        }
-                    })
-                    .child(input),
-            )
-            .children(popover)
+        div().id(self.id.clone()).child(input).children(popover)
     }
 }

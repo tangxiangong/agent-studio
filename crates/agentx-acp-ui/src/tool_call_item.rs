@@ -561,11 +561,8 @@ mod tests {
     fn display_title_formats_read_with_ranges() {
         let mut tool_call = ToolCall::new("tc-1", "Read file");
         tool_call.kind = ToolKind::Read;
-        tool_call.locations = vec![ToolCallLocation {
-            path: PathBuf::from("test.txt"),
-            line: None,
-            meta: None,
-        }];
+        let location = ToolCallLocation::new(PathBuf::from("test.txt"));
+        tool_call.locations = vec![location];
         tool_call.raw_input = Some(serde_json::json!({"offset": 5, "limit": 10}));
 
         let item = ToolCallItem::new(tool_call);

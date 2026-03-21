@@ -11,7 +11,7 @@ fn main() {
     // Parse config path from command line arguments
     let config_path = parse_config_path();
 
-    let app = gpui_platform::application().with_assets(Assets);
+    let app = Application::new().with_assets(Assets);
     app.run(move |cx| {
         agentx::init(cx);
 
@@ -80,7 +80,9 @@ fn main() {
             });
 
             let mut agent_servers = config.agent_servers.clone();
-            if !nodejs_path.is_empty() {
+            if let Ok(nodejs_path) = nodejs_path
+                && !nodejs_path.is_empty()
+            {
                 log::info!("Using custom Node.js path from settings: {}", nodejs_path);
                 // Inject nodejs_path into all agent configs
                 for (_name, agent_config) in agent_servers.iter_mut() {
@@ -119,7 +121,7 @@ fn main() {
                     });
 
                     // Initialize persistence subscription in async context
-                    if let Some(message_service) = init_result {
+                    if let Ok(Some(message_service)) = init_result {
                         message_service.init_persistence();
                         println!("Agent initialization started - agents will appear as they are ready");
                     } else {

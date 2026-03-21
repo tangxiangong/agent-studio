@@ -176,7 +176,7 @@ impl AgentMessage {
 }
 
 impl RenderOnce for AgentMessage {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let agent_name = self.data.agent_name().unwrap_or("Agent");
         let full_text = self.data.full_text();
         let markdown_id = SharedString::from(format!("{}-markdown", self.id));
@@ -198,7 +198,7 @@ impl RenderOnce for AgentMessage {
                         div()
                             .w_full()
                             .child(
-                                TextView::markdown(markdown_id, full_text)
+                                TextView::markdown(markdown_id, full_text, window, cx)
                                     .text_sm()
                                     .text_color(cx.theme().foreground)
                                     .selectable(true)

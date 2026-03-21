@@ -197,11 +197,15 @@ mod tests {
 
     #[test]
     fn extract_terminal_output_reads_nested_meta() {
-        let terminal = acp::Terminal::new("term-1").meta(serde_json::json!({
+        let meta = serde_json::json!({
             "terminal_output": {
                 "output": ["line1", "line2"]
             }
-        }));
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let terminal = acp::Terminal::new("term-1").meta(meta);
         let output = extract_terminal_output(&terminal).unwrap();
         assert_eq!(output, "line1\nline2");
     }

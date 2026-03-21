@@ -898,13 +898,6 @@ impl acp::Client for GuiClient {
         Err(acp::Error::method_not_found())
     }
 
-    async fn kill_terminal_command(
-        &self,
-        _args: acp::KillTerminalCommandRequest,
-    ) -> acp::Result<acp::KillTerminalCommandResponse> {
-        Err(acp::Error::method_not_found())
-    }
-
     async fn session_notification(
         &self,
         args: acp::SessionNotification,

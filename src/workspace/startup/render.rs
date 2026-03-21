@@ -1,3 +1,4 @@
+use gpui::InteractiveElement as _;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::{
@@ -8,7 +9,6 @@ use gpui_component::{
     h_flex,
     input::Input,
     scroll::ScrollableElement as _,
-    stepper::{Stepper, StepperItem},
     switch::Switch,
     v_flex,
 };
@@ -61,96 +61,61 @@ impl DockWorkspace {
             IconName::Globe
         };
 
-        let stepper = Stepper::new("startup-stepper")
+        let steps = [
+            (
+                intro_icon,
+                t!("startup.step.preferences.title").to_string(),
+                t!("startup.step.preferences.subtitle").to_string(),
+            ),
+            (
+                node_icon,
+                t!("startup.step.nodejs.title").to_string(),
+                t!("startup.step.nodejs.subtitle").to_string(),
+            ),
+            (
+                agent_icon,
+                t!("startup.step.agents.title").to_string(),
+                t!("startup.step.agents.subtitle").to_string(),
+            ),
+            (
+                proxy_icon,
+                t!("startup.step.proxy.title").to_string(),
+                t!("startup.step.proxy.subtitle").to_string(),
+            ),
+            (
+                workspace_icon,
+                t!("startup.step.workspace.title").to_string(),
+                t!("startup.step.workspace.subtitle").to_string(),
+            ),
+        ];
+
+        let stepper = h_flex()
             .w_full()
-            .bg(cx.theme().background)
-            .with_size(UiSize::Large)
-            .selected_index(self.startup_state.step)
-            .text_center(true)
-            .items([
-                StepperItem::new().icon(intro_icon).child(
-                    v_flex()
-                        .items_center()
-                        .child(
-                            div()
-                                .text_size(px(14.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(t!("startup.step.preferences.title").to_string()),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .child(t!("startup.step.preferences.subtitle").to_string()),
-                        ),
-                ),
-                StepperItem::new().icon(node_icon).child(
-                    v_flex()
-                        .items_center()
-                        .child(
-                            div()
-                                .text_size(px(14.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(t!("startup.step.nodejs.title").to_string()),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .child(t!("startup.step.nodejs.subtitle").to_string()),
-                        ),
-                ),
-                StepperItem::new().icon(agent_icon).child(
-                    v_flex()
-                        .items_center()
-                        .child(
-                            div()
-                                .text_size(px(14.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(t!("startup.step.agents.title").to_string()),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .child(t!("startup.step.agents.subtitle").to_string()),
-                        ),
-                ),
-                StepperItem::new().icon(proxy_icon).child(
-                    v_flex()
-                        .items_center()
-                        .child(
-                            div()
-                                .text_size(px(14.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(t!("startup.step.proxy.title").to_string()),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .child(t!("startup.step.proxy.subtitle").to_string()),
-                        ),
-                ),
-                StepperItem::new().icon(workspace_icon).child(
-                    v_flex()
-                        .items_center()
-                        .child(
-                            div()
-                                .text_size(px(14.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(t!("startup.step.workspace.title").to_string()),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .child(t!("startup.step.workspace.subtitle").to_string()),
-                        ),
-                ),
-            ])
-            .on_click(cx.listener(|this, step, _, cx| {
-                if !this.startup_state.intro_completed && *step > 0 {
-                    return;
-                }
-                this.startup_state.step = *step;
-                cx.notify();
-            }));
+            .gap_3()
+            .children(
+                steps
+                    .into_iter()
+                    .enumerate()
+                    .map(|(ix, (icon, title, _subtitle))| {
+                        let is_current = self.startup_state.step == ix;
+                        let is_locked = !self.startup_state.intro_completed && ix > 0;
+                        Button::new(("startup-step", ix))
+                            .label(title)
+                            .icon(Icon::new(icon))
+                            .w_full()
+                            .when(is_current, |btn| btn.primary())
+                            .when(!is_current, |btn| btn.outline())
+                            .disabled(is_locked)
+                            .on_click(cx.listener(move |this, _ev, _, cx| {
+                                if !this.startup_state.intro_completed && ix > 0 {
+                                    return;
+                                }
+                                this.startup_state.step = ix;
+                                cx.notify();
+                            }))
+                            .into_any_element()
+                    }),
+            );
 
         let content = match self.startup_state.step {
             0 => self.render_preferences_step(cx),

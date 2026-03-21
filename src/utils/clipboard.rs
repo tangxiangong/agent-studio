@@ -32,6 +32,5 @@ fn mime_type_for_format(format: ImageFormat) -> &'static str {
         ImageFormat::Svg => "image/svg+xml",
         ImageFormat::Bmp => "image/bmp",
         ImageFormat::Tiff => "image/tiff",
-        ImageFormat::Ico => "image/icon",
     }
 }

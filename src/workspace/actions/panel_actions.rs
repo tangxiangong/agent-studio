@@ -19,6 +19,13 @@ use crate::{
 
 use crate::workspace::DockWorkspace;
 
+#[derive(serde::Deserialize)]
+struct SerializedDockState {
+    panel: PanelState,
+    size: Pixels,
+    open: bool,
+}
+
 impl DockWorkspace {
     pub(in crate::workspace) fn submit(
         &mut self,
@@ -71,8 +78,8 @@ impl DockWorkspace {
         }
 
         self.dock_area.update(cx, |dock_area, cx| {
-            let selection = Self::find_focused_tab_panel(dock_area.center(), window, cx)
-                .or_else(|| Self::find_first_tab_panel(dock_area.center(), cx));
+            let selection = Self::find_focused_tab_panel(dock_area.items(), window, cx)
+                .or_else(|| Self::find_first_tab_panel(dock_area.items(), cx));
 
             if let Some((_, active_panel)) = selection {
                 if let Ok(container) = active_panel.view().downcast::<DockPanelContainer>() {
@@ -178,9 +185,19 @@ impl DockWorkspace {
             "Searching existing session panel: session_id={}",
             session_id
         );
-        let items = self.dock_area.read(cx).center().clone();
-        let found = Self::activate_session_in_item(&items, session_id, window, cx);
+        let mut center = self.dock_area.read(cx).dump(cx).center;
+        let found = Self::activate_session_in_state(&mut center, session_id);
         if found {
+            let updated = center.to_item(self.dock_area.downgrade(), window, cx);
+            self.dock_area.update(cx, |dock_area, cx| {
+                dock_area.set_center(updated, window, cx);
+            });
+
+            if let Some(panel) =
+                Self::find_active_panel_by_session(self.dock_area.read(cx).items(), session_id, cx)
+            {
+                panel.focus_handle(cx).focus(window);
+            }
             log::debug!(
                 "Activated existing session panel: session_id={}",
                 session_id
@@ -191,56 +208,39 @@ impl DockWorkspace {
         found
     }
 
-    fn activate_session_in_item(
-        item: &DockItem,
-        session_id: &str,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> bool {
-        match item {
-            DockItem::Tabs { view, .. } => {
-                let tab_state = view.read(cx).dump(cx);
-                let active_ix = tab_state.info.active_index().unwrap_or(0);
-
-                for (ix, child_state) in tab_state.children.iter().enumerate() {
-                    if !Self::panel_state_contains_session(child_state, session_id) {
-                        continue;
-                    }
-
-                    log::debug!(
-                        "Found session panel in tabs: session_id={} active_ix={} target_ix={}",
-                        session_id,
-                        active_ix,
-                        ix
-                    );
-
-                    if ix != active_ix {
-                        let _ = item.clone().active_index(ix, cx);
-                    }
-
-                    if let Some(active_panel) = view.read(cx).active_panel(cx) {
-                        active_panel.focus_handle(cx).focus(window, cx);
-                    }
-                    let _ = view.update(cx, |_, cx| {
-                        cx.notify();
-                    });
+    fn activate_session_in_state(state: &mut PanelState, session_id: &str) -> bool {
+        if let PanelInfo::Tabs { active_index } = &mut state.info {
+            for (ix, child_state) in state.children.iter_mut().enumerate() {
+                if Self::panel_state_contains_session(child_state, session_id) {
+                    *active_index = ix;
                     return true;
                 }
+            }
+        }
 
-                false
+        state
+            .children
+            .iter_mut()
+            .any(|child| Self::activate_session_in_state(child, session_id))
+    }
+
+    fn find_active_panel_by_session(
+        item: &DockItem,
+        session_id: &str,
+        cx: &App,
+    ) -> Option<Arc<dyn PanelView>> {
+        match item {
+            DockItem::Tabs { view, .. } => {
+                let active_panel = view.read(cx).active_panel(cx)?;
+                Self::panel_matches_session(&active_panel, session_id, cx).then_some(active_panel)
             }
             DockItem::Split { items, .. } => items
                 .iter()
-                .any(|item| Self::activate_session_in_item(item, session_id, window, cx)),
+                .find_map(|item| Self::find_active_panel_by_session(item, session_id, cx)),
             DockItem::Panel { view, .. } => {
-                if Self::panel_matches_session(view, session_id, cx) {
-                    view.set_active(true, window, cx);
-                    view.focus_handle(cx).focus(window, cx);
-                    return true;
-                }
-                false
+                Self::panel_matches_session(view, session_id, cx).then_some(view.clone())
             }
-            DockItem::Tiles { .. } => false,
+            DockItem::Tiles { .. } => None,
         }
     }
 
@@ -331,57 +331,45 @@ impl DockWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let Some(bottom_dock) = self.dock_area.read(cx).bottom_dock().cloned() else {
+        let Some(bottom_dock) = self.dock_area.read(cx).dump(cx).bottom_dock else {
             return false;
         };
-        let panel = bottom_dock.read(cx).panel().clone();
-        Self::activate_panel_by_klass(&panel, SessionManagerPanel::klass(), window, cx)
+        let Ok(mut bottom_dock) = serde_json::to_value(bottom_dock)
+            .and_then(serde_json::from_value::<SerializedDockState>)
+        else {
+            return false;
+        };
+
+        if !Self::activate_panel_state_by_klass(
+            &mut bottom_dock.panel,
+            SessionManagerPanel::klass(),
+        ) {
+            return false;
+        }
+
+        let item = bottom_dock
+            .panel
+            .to_item(self.dock_area.downgrade(), window, cx);
+        self.dock_area.update(cx, |dock_area, cx| {
+            dock_area.set_bottom_dock(item, Some(bottom_dock.size), bottom_dock.open, window, cx);
+        });
+        true
     }
 
-    fn activate_panel_by_klass(
-        item: &DockItem,
-        klass: &str,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> bool {
-        match item {
-            DockItem::Tabs { view, .. } => {
-                let tab_state = view.read(cx).dump(cx);
-                let active_ix = tab_state.info.active_index().unwrap_or(0);
-
-                for (ix, child_state) in tab_state.children.iter().enumerate() {
-                    if !Self::panel_state_matches_klass(child_state, klass) {
-                        continue;
-                    }
-
-                    if ix != active_ix {
-                        let _ = item.clone().active_index(ix, cx);
-                    }
-
-                    if let Some(active_panel) = view.read(cx).active_panel(cx) {
-                        active_panel.focus_handle(cx).focus(window, cx);
-                    }
-                    let _ = view.update(cx, |_, cx| {
-                        cx.notify();
-                    });
+    fn activate_panel_state_by_klass(state: &mut PanelState, klass: &str) -> bool {
+        if let PanelInfo::Tabs { active_index } = &mut state.info {
+            for (ix, child_state) in state.children.iter_mut().enumerate() {
+                if Self::panel_state_matches_klass(child_state, klass) {
+                    *active_index = ix;
                     return true;
                 }
-
-                false
             }
-            DockItem::Split { items, .. } => items
-                .iter()
-                .any(|item| Self::activate_panel_by_klass(item, klass, window, cx)),
-            DockItem::Panel { view, .. } => {
-                if Self::panel_matches_klass(view, klass, cx) {
-                    view.set_active(true, window, cx);
-                    view.focus_handle(cx).focus(window, cx);
-                    return true;
-                }
-                false
-            }
-            DockItem::Tiles { .. } => false,
         }
+
+        state
+            .children
+            .iter_mut()
+            .any(|child| Self::activate_panel_state_by_klass(child, klass))
     }
 
     fn panel_state_matches_klass(panel_state: &PanelState, klass: &str) -> bool {

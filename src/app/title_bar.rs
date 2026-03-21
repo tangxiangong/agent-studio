@@ -37,7 +37,7 @@ impl AppTitleBar {
         AppState::global_mut(cx).set_app_title(title);
 
         let font_size_selector = cx.new(|cx| FontSizeSelector::new(window, cx));
-        let app_menu_bar = AppMenuBar::new(cx);
+        let app_menu_bar = AppMenuBar::new(window, cx);
 
         Self {
             app_menu_bar,

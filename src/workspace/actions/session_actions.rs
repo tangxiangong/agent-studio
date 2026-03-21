@@ -380,7 +380,9 @@ impl DockWorkspace {
             let message_service = cx.update(|cx| AppState::global(cx).message_service().cloned());
 
             let (agent_service, message_service) = match (agent_service, message_service) {
-                (Some(agent_service), Some(message_service)) => (agent_service, message_service),
+                (Ok(Some(agent_service)), Ok(Some(message_service))) => {
+                    (agent_service, message_service)
+                }
                 _ => {
                     log::error!("AgentService or MessageService not initialized");
                     return;
@@ -452,7 +454,7 @@ impl DockWorkspace {
 
             let agent_service = cx.update(|cx| AppState::global(cx).agent_service().cloned());
 
-            if let Some(agent_service) = agent_service {
+            if let Ok(Some(agent_service)) = agent_service {
                 log::info!("DockWorkspace: Got AgentService");
 
                 match agent_service.cancel_session_by_id(&session_id).await {

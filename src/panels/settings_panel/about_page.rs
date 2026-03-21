@@ -48,10 +48,7 @@ pub fn about_page(resettable: bool) -> SettingPage {
                             "https://docs.rs/gpui-component",
                         )),
                     )
-                    .description(TextView::markdown(
-                        "desc",
-                        t!("settings.about.links.docs.description").to_string(),
-                    )),
+                    .description(t!("settings.about.links.docs.description").to_string()),
                     SettingItem::new(
                         t!("settings.about.links.website.label").to_string(),
                         SettingField::render(|options, _window, _cx| {

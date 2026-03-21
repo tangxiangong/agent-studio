@@ -186,7 +186,7 @@ impl TerminalPanel {
                         // Focus the terminal view
                         if let Some(tv) = &this.terminal_view {
                             let focus_handle = tv.read(cx).focus_handle(cx);
-                            focus_handle.focus(window, cx);
+                            focus_handle.focus(window);
                         }
                     });
                 }

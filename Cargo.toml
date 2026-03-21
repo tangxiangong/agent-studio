@@ -1,44 +1,37 @@
 [workspace]
 members = [
     ".",
-    "crates/agentx-types",
-    "crates/agentx-event-bus",
-    "crates/agentx-agent",
-    "crates/agentx-services",
     "crates/agentx-acp-ui",
+    "crates/agentx-agent",
+    "crates/agentx-event-bus",
+    "crates/agentx-services",
+    "crates/agentx-types",
     "crates/git-worktree-manager",
 ]
 resolver = "2"
 
 [workspace.dependencies]
-# Internal crates
-agentx-types = { path = "crates/agentx-types" }
-agentx-event-bus = { path = "crates/agentx-event-bus" }
+agent-client-protocol = { version = "0.10", features = ["unstable"] }
 agentx-agent = { path = "crates/agentx-agent" }
+agentx-acp-ui = { path = "crates/agentx-acp-ui" }
+agentx-event-bus = { path = "crates/agentx-event-bus" }
 agentx-services = { path = "crates/agentx-services" }
-
-# Agent communication
-agent-client-protocol = { version = "0.9.4", features = ["unstable"] }
-
-# Async runtime
-tokio = { version = "1.48.0" }
-tokio-util = { version = "0.7.17", features = ["compat"] }
+agentx-types = { path = "crates/agentx-types" }
+anyhow = "1"
 async-trait = "0.1"
-smol = "2"
-
-# Serialization
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6.0"
+gpui = "0.2.2"
+gpui-component = "0.5.1"
+log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
-chrono = { version = "0.4", features = ["serde"] }
-
-# Error handling and logging
-anyhow = "1"
-log = "0.4"
-
-# Utilities
+similar = { version = "2.6", features = ["text"] }
+smol = "2"
+tokio = { version = "1.48.0" }
+tokio-util = { version = "0.7.17", features = ["compat"] }
 uuid = { version = "1.11", features = ["v4"] }
-dirs = "6.0"
-which = "7.0"
+which = "8"
 
 [workspace.lints.rust]
 dead_code = "allow"
@@ -51,14 +44,22 @@ module_inception = "allow"
 too_many_arguments = "allow"
 type_complexity = "allow"
 
-[package]
-name = "agentx"
+[workspace.package]
 version = "0.3.1"
 edition = "2024"
-description = "An Agent Studio - A full-featured desktop AI agent studio built with GPUI"
 license = "Apache-2.0"
 publish = false
 authors = ["AgentX Team <hi@agentx.plus>"]
+
+
+[package]
+name = "agentx"
+version.workspace = true
+edition.workspace = true
+description = "An Agent Studio - A full-featured desktop AI agent studio built with GPUI"
+license.workspace = true
+publish.workspace = true
+authors.workspace = true
 readme = "README.md"
 
 [package.metadata.bundle]
@@ -88,30 +89,28 @@ default = ["unstable"]
 unstable = []
 
 [dependencies]
-# Internal crates
-agentx-types.workspace = true
-agentx-event-bus.workspace = true
+agent-client-protocol = { workspace = true }
+agentx-acp-ui = { workspace = true }
 agentx-agent = { workspace = true, features = ["unstable"] }
-agentx-services.workspace = true
-
-# Core GPUI framework
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui-component = { git = "https://github.com/sxhxliang/gpui-component", branch = "dev" }
-gpui_term = { git = "https://github.com/sxhxliang/gpui-term" }
-# gpui-component = { path = "../crates/ui" }
-
-# Agent communication
-agent-client-protocol.workspace = true
-agentx-acp-ui = { path = "crates/agentx-acp-ui" }
-
-# Async runtime
-tokio = { workspace = true, features = ["rt", "rt-multi-thread", "process", "fs", "io-util"] }
-tokio-util.workspace = true
-async-trait.workspace = true
-smol.workspace = true
-
-# HTTP client (embedded)
+agentx-event-bus = { workspace = true }
+agentx-services = { workspace = true }
+agentx-types = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+autocorrect = "2.14"
+base64 = "0.22"
+bytes = "1.0"
+chrono = { workspace = true }
+color-lsp = "0.2"
+dirs = { workspace = true }
+futures = "0.3"
+gpui = { workspace = true }
+gpui-component = { workspace = true }
+gpui_term = { path = "vendor/gpui-term/crates/gpui_term" }
+image = "0.25"
+log = { workspace = true }
+lsp-types = { version = "0.97", features = ["proposed"] }
+regex = "1"
 reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662463bda39148ba154100dd44d3fba5873a4", default-features = false, features = [
     "charset",
     "http2",
@@ -121,43 +120,30 @@ reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662
     "socks",
     "stream",
 ], package = "zed-reqwest", version = "0.12.15-zed" }
-rustls = "0.23.26"
-rustls-platform-verifier = "0.5.0"
-bytes = "1.0"
-futures = "0.3"
-
-# Serialization
+rfd = "0.17"
+rust-embed = { version = "8", features = ["interpolate-folder-path"] }
+rust-i18n = "3"
+rustls = "0.23"
+rustls-platform-verifier = "0.6"
 serde = { workspace = true }
 serde_json.workspace = true
-
-# Error handling and logging
-anyhow.workspace = true
-log.workspace = true
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
-
-# Language support
-tree-sitter-navi = "0.2.2"
-color-lsp = "0.2.0"
-lsp-types = { version = "0.97.0", features = ["proposed"] }
-
-# Utilities
-rust-embed = { version = "8", features = ["interpolate-folder-path"] }
-autocorrect = "2.14.2"
-chrono.workspace = true
-rfd = "0.15"
-uuid.workspace = true
-rust-i18n = "3"
-similar = { version = "2.6", features = ["text"] }
-regex = "1"
-base64 = "0.22"
-which.workspace = true
-image = "0.25"
-dirs.workspace = true
+similar = { workspace = true }
+smol = { workspace = true }
 sys-locale = "0.3"
-
-# System tray
-tray-icon = "0.19"
+tokio = { workspace = true, features = [
+    "rt",
+    "rt-multi-thread",
+    "process",
+    "fs",
+    "io-util",
+] }
+tokio-util = { workspace = true }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tray-icon = "0.21"
+tree-sitter-navi = "0.2.2"
+uuid = { workspace = true }
+which = { workspace = true }
 
 # Linux-only: GTK for tray icon initialization
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -165,8 +151,8 @@ gtk = "0.18"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Pin macOS font stack to avoid core-graphics version skew with gpui/zed-font-kit.
-core-text = "=21.0.0"
 core-graphics = "=0.24.0"
+core-text = "=21.0.0"
 
 [lints.rust]
 dead_code = "allow"
@@ -194,11 +180,11 @@ too_many_arguments = "allow"
 mutable_key_type = "allow"
 
 [profile.dev]
-opt-level = 1            # 轻量优化，平衡编译速度和文件大小
-codegen-units = 16       # 保持快速编译
-debug = "limited"        # 有限的调试信息
+opt-level = 1                # 轻量优化，平衡编译速度和文件大小
+codegen-units = 16           # 保持快速编译
+debug = "limited"            # 有限的调试信息
 split-debuginfo = "unpacked"
-strip = "debuginfo"      # 移除调试信息但保留符号表
+strip = "debuginfo"          # 移除调试信息但保留符号表
 
 [profile.dev.package]
 resvg = { opt-level = 3 }
@@ -207,8 +193,8 @@ taffy = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }
 
 [profile.release]
-opt-level = "z"          # 优化目标为大小 (size optimization)
-lto = "fat"              # 完整的链接时优化 (full LTO)
-codegen-units = 1        # 最小化编译单元以获得最佳优化
-strip = true             # 自动移除符号和调试信息
-panic = "abort"          # 使用 abort 代替 unwind，减少二进制大小
+opt-level = "z"   # 优化目标为大小 (size optimization)
+lto = "fat"       # 完整的链接时优化 (full LTO)
+codegen-units = 1 # 最小化编译单元以获得最佳优化
+strip = true      # 自动移除符号和调试信息
+panic = "abort"   # 使用 abort 代替 unwind，减少二进制大小

@@ -2,7 +2,7 @@ use gpui::{
     App, ElementId, Entity, InteractiveElement, IntoElement, ParentElement, RenderOnce,
     SharedString, Styled, Window, div, prelude::FluentBuilder, px,
 };
-use std::{rc::Rc, sync::Arc};
+use std::rc::Rc;
 
 use gpui_component::{
     ActiveTheme, Disableable, Icon, IconName, Sizable,
@@ -322,7 +322,7 @@ impl RenderOnce for ChatInputBox {
         let input_state = self.input_state.clone();
         let disabled = self.disabled;
         let suggestion_state_id =
-            ElementId::NamedChild(Arc::new(self.id.clone()), "command-suggestions".into());
+            ElementId::NamedChild(Box::new(self.id.clone()), "command-suggestions".into());
         let suggestion_state = window.use_keyed_state(suggestion_state_id, cx, |window, cx| {
             InputSuggestionState::with_input(input_state.clone(), window, cx)
         });
@@ -544,7 +544,7 @@ impl RenderOnce for ChatInputBox {
                         {
                             let mut input = InputSuggestion::new(&suggestion_state)
                                 .id(ElementId::NamedChild(
-                                    Arc::new(self.id.clone()),
+                                    Box::new(self.id.clone()),
                                     "command-suggestion-input".into(),
                                 ))
                                 .items(suggestions)
